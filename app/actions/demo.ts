@@ -120,6 +120,11 @@ export async function generateDemoData() {
 
 export async function generateNewTicketsAndClients() {
     try {
+        // Check if DATABASE_URL is available
+        if (!process.env.DATABASE_URL) {
+            return { error: 'DATABASE_URL environment variable is not configured. Please configure it in your Vercel project settings.' };
+        }
+
         // Get existing stores (try with userId first, then all stores)
         let stores: Array<{ id: string; name: string; userId: string | null }> = [];
         try {
@@ -137,7 +142,11 @@ export async function generateNewTicketsAndClients() {
                 stores = await prisma.store.findMany();
             } catch (error) {
                 console.error('Error fetching stores:', error);
-                return { error: `Error fetching stores: ${error instanceof Error ? error.message : 'Unknown error'}` };
+                const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+                if (errorMessage.includes('DATABASE_URL') || errorMessage.includes('Environment variable')) {
+                    return { error: 'Database connection not configured. Please check your DATABASE_URL environment variable in Vercel project settings.' };
+                }
+                return { error: `Error fetching stores: ${errorMessage}` };
             }
         }
         

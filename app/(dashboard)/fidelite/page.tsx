@@ -22,7 +22,8 @@ import { Pencil } from 'lucide-react'
 export const dynamic = 'force-dynamic'
 
 async function getTopLoyalCustomers() {
-  const accounts = await prisma.loyaltyAccount.findMany({
+  try {
+    const accounts = await prisma.loyaltyAccount.findMany({
     include: {
       customer: {
         include: {
@@ -77,10 +78,15 @@ async function getTopLoyalCustomers() {
       topCategories,
     }
   })
+  } catch (error) {
+    console.error('Error fetching top loyal customers:', error)
+    return []
+  }
 }
 
 async function getCampaigns() {
-  return await prisma.loyaltyCampaign.findMany({
+  try {
+    return await prisma.loyaltyCampaign.findMany({
     include: {
       program: true,
     },
@@ -88,6 +94,10 @@ async function getCampaigns() {
       createdAt: 'desc',
     },
   })
+  } catch (error) {
+    console.error('Error fetching campaigns:', error)
+    return []
+  }
 }
 
 export default async function FidelitePage() {

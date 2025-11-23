@@ -15,7 +15,8 @@ import {
 export const dynamic = 'force-dynamic'
 
 async function getStoresWithStats() {
-  const stores = await prisma.store.findMany({
+  try {
+    const stores = await prisma.store.findMany({
     include: {
       receipts: {
         where: {
@@ -53,6 +54,10 @@ async function getStoresWithStats() {
       terminalCount: store._count.pos,
     }
   })
+  } catch (error) {
+    console.error('Error fetching stores:', error)
+    return []
+  }
 }
 
 export default async function MagasinsPage() {

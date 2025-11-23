@@ -17,7 +17,8 @@ import { Button } from '@/components/ui/button'
 export const dynamic = 'force-dynamic'
 
 async function getStore(id: string) {
-  const store = await prisma.store.findUnique({
+  try {
+    const store = await prisma.store.findUnique({
     where: { id },
     include: {
       pos: {
@@ -58,7 +59,10 @@ async function getStore(id: string) {
     include: {
       lineItems: true,
     },
-  })
+    })
+  } catch (error) {
+    console.error('Error fetching receipts for category analysis:', error)
+  }
 
   const categoryCounts = new Map<string, number>()
   allReceipts.forEach((r) => {

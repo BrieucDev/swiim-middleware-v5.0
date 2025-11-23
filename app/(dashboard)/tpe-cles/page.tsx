@@ -17,21 +17,31 @@ import { Plus } from 'lucide-react'
 export const dynamic = 'force-dynamic'
 
 async function getTerminals() {
-  return await prisma.posTerminal.findMany({
-    include: {
-      store: true,
-    },
-    orderBy: {
-      name: 'asc',
-    },
-  })
+  try {
+    return await prisma.posTerminal.findMany({
+      include: {
+        store: true,
+      },
+      orderBy: {
+        name: 'asc',
+      },
+    })
+  } catch (error) {
+    console.error('Error fetching terminals:', error)
+    return []
+  }
 }
 
 async function getStores() {
-  return await prisma.store.findMany({
-    orderBy: { name: 'asc' },
-    select: { id: true, name: true },
-  })
+  try {
+    return await prisma.store.findMany({
+      orderBy: { name: 'asc' },
+      select: { id: true, name: true },
+    })
+  } catch (error) {
+    console.error('Error fetching stores:', error)
+    return []
+  }
 }
 
 export default async function TPEClesPage() {

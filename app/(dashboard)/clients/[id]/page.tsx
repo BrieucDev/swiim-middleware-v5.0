@@ -17,7 +17,8 @@ import { Button } from '@/components/ui/button'
 export const dynamic = 'force-dynamic'
 
 async function getCustomer(id: string) {
-  const customer = await prisma.customer.findUnique({
+  try {
+    const customer = await prisma.customer.findUnique({
     where: { id },
     include: {
       receipts: {
@@ -64,9 +65,14 @@ async function getCustomer(id: string) {
     storeCounts.size > 0
       ? Array.from(storeCounts.entries()).sort((a, b) => b[1] - a[1])[0][0]
       : null
-  const mainStore = mainStoreId
-    ? await prisma.store.findUnique({ where: { id: mainStoreId } })
-    : null
+  let mainStore = null
+  if (mainStoreId) {
+    try {
+      mainStore = await prisma.store.findUnique({ where: { id: mainStoreId } })
+    } catch (error) {
+      console.error('Error fetching main store:', error)
+    }
+  }
 
   // Frequency
   const visits = receipts.length

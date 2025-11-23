@@ -18,35 +18,40 @@ import { Search } from 'lucide-react'
 export const dynamic = 'force-dynamic'
 
 async function getReceipts(searchParams: { status?: string; store?: string; query?: string }) {
-  const where: any = {}
+  try {
+    const where: any = {}
 
-  if (searchParams.status) {
-    where.status = searchParams.status
+    if (searchParams.status) {
+      where.status = searchParams.status
+    }
+
+    if (searchParams.store && searchParams.store !== 'all') {
+      where.storeId = searchParams.store
+    }
+
+    if (searchParams.query) {
+      where.OR = [
+        { id: { contains: searchParams.query, mode: 'insensitive' } },
+        { customer: { email: { contains: searchParams.query, mode: 'insensitive' } } },
+      ]
+    }
+
+    return await prisma.receipt.findMany({
+      where,
+      include: {
+        store: true,
+        pos: true,
+        customer: true,
+      },
+      orderBy: {
+        createdAt: 'desc',
+      },
+      take: 100,
+    })
+  } catch (error) {
+    console.error('Error fetching receipts:', error)
+    return []
   }
-
-  if (searchParams.store && searchParams.store !== 'all') {
-    where.storeId = searchParams.store
-  }
-
-  if (searchParams.query) {
-    where.OR = [
-      { id: { contains: searchParams.query, mode: 'insensitive' } },
-      { customer: { email: { contains: searchParams.query, mode: 'insensitive' } } },
-    ]
-  }
-
-  return await prisma.receipt.findMany({
-    where,
-    include: {
-      store: true,
-      pos: true,
-      customer: true,
-    },
-    orderBy: {
-      createdAt: 'desc',
-    },
-    take: 100,
-  })
 }
 
 export default async function TicketsPage({
@@ -55,7 +60,13 @@ export default async function TicketsPage({
   searchParams: { status?: string; store?: string; query?: string }
 }) {
   const receipts = await getReceipts(searchParams)
-  const stores = await prisma.store.findMany({ orderBy: { name: 'asc' } })
+  
+  let stores: Array<{ id: string; name: string }> = []
+  try {
+    stores = await prisma.store.findMany({ orderBy: { name: 'asc' } })
+  } catch (error) {
+    console.error('Error fetching stores:', error)
+  }
 
   return (
     <div className="space-y-8">

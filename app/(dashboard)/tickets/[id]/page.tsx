@@ -19,15 +19,20 @@ import { Printer, RefreshCw } from 'lucide-react'
 export const dynamic = 'force-dynamic'
 
 async function getReceipt(id: string) {
-  return await prisma.receipt.findUnique({
-    where: { id },
-    include: {
-      store: true,
-      pos: true,
-      customer: true,
-      lineItems: true,
-    },
-  })
+  try {
+    return await prisma.receipt.findUnique({
+      where: { id },
+      include: {
+        store: true,
+        pos: true,
+        customer: true,
+        lineItems: true,
+      },
+    })
+  } catch (error) {
+    console.error('Error fetching receipt:', error)
+    return null
+  }
 }
 
 export default async function TicketDetailPage({

@@ -121,7 +121,7 @@ export async function generateDemoData() {
 export async function generateNewTicketsAndClients() {
     try {
         // Get existing stores (try with userId first, then all stores)
-        let stores = [];
+        let stores: Array<{ id: string; name: string; userId: string | null }> = [];
         try {
             const session = await auth();
             if (session?.user?.id) {

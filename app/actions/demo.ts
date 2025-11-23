@@ -122,7 +122,7 @@ export async function generateNewTicketsAndClients() {
     try {
         // Check if DATABASE_URL is available
         if (!process.env.DATABASE_URL) {
-            return { error: 'DATABASE_URL environment variable is not configured. Please configure it in your Vercel project settings.' };
+            return { error: 'DATABASE_URL environment variable is not configured. Please configure it in your Vercel project settings (Settings → Environment Variables).' };
         }
 
         // Get existing stores (try with userId first, then all stores)
@@ -133,6 +133,10 @@ export async function generateNewTicketsAndClients() {
                 stores = await prisma.store.findMany({ where: { userId: session.user.id } });
             }
         } catch (error) {
+            const errorMessage = error instanceof Error ? error.message : String(error);
+            if (errorMessage.includes('DATABASE_URL') || errorMessage.includes('Environment variable not found')) {
+                return { error: 'Database connection not configured. Please check your DATABASE_URL environment variable in Vercel project settings (Settings → Environment Variables).' };
+            }
             console.log('Auth check failed, using all stores:', error);
         }
         
@@ -142,9 +146,9 @@ export async function generateNewTicketsAndClients() {
                 stores = await prisma.store.findMany();
             } catch (error) {
                 console.error('Error fetching stores:', error);
-                const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-                if (errorMessage.includes('DATABASE_URL') || errorMessage.includes('Environment variable')) {
-                    return { error: 'Database connection not configured. Please check your DATABASE_URL environment variable in Vercel project settings.' };
+                const errorMessage = error instanceof Error ? error.message : String(error);
+                if (errorMessage.includes('DATABASE_URL') || errorMessage.includes('Environment variable not found')) {
+                    return { error: 'Database connection not configured. Please check your DATABASE_URL environment variable in Vercel project settings (Settings → Environment Variables).' };
                 }
                 return { error: `Error fetching stores: ${errorMessage}` };
             }

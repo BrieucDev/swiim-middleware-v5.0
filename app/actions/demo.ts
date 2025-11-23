@@ -117,3 +117,113 @@ export async function generateDemoData() {
         return { error: 'Failed to generate demo data' };
     }
 }
+
+export async function generateNewTicketsAndClients() {
+    const session = await auth();
+    if (!session?.user?.id) {
+        return { error: 'Unauthorized' };
+    }
+
+    const userId = session.user.id;
+
+    try {
+        // Get existing stores
+        const stores = await prisma.store.findMany({ where: { userId } });
+        if (stores.length === 0) {
+            return { error: 'No stores found. Please create a store first.' };
+        }
+
+        // Get existing terminals
+        const terminals = await prisma.posTerminal.findMany({
+            where: { storeId: { in: stores.map(s => s.id) } },
+        });
+        if (terminals.length === 0) {
+            return { error: 'No terminals found. Please create a terminal first.' };
+        }
+
+        // Get existing customers or create new ones
+        const existingCustomers = await prisma.customer.findMany();
+        const customers = [...existingCustomers];
+
+        // Create 5-10 new customers
+        const newCustomersCount = randomInt(5, 10);
+        for (let i = 0; i < newCustomersCount; i++) {
+            const firstName = randomChoice(firstNames);
+            const lastName = randomChoice(lastNames);
+            const customer = await prisma.customer.create({
+                data: {
+                    firstName,
+                    lastName,
+                    email: `${firstName.toLowerCase()}.${lastName.toLowerCase()}.${Math.random().toString(36).substring(2, 5)}@swiim.client`,
+                },
+            });
+            customers.push(customer);
+        }
+
+        // Create 20-30 new receipts
+        const now = new Date();
+        const startDate = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000); // Last 7 days
+
+        const receiptsCount = randomInt(20, 30);
+        const statuses: Array<'EMIS' | 'RECLAME' | 'REMBOURSE' | 'ANNULE'> = ['EMIS', 'RECLAME', 'REMBOURSE', 'ANNULE'];
+        const statusWeights = [0.7, 0.15, 0.1, 0.05]; // Most are EMIS
+
+        for (let i = 0; i < receiptsCount; i++) {
+            const store = randomChoice(stores);
+            const terminal = randomChoice(terminals.filter(t => t.storeId === store.id));
+            const customer = Math.random() < 0.8 ? randomChoice(customers) : null;
+            const receiptDate = randomDate(startDate, now);
+            const numItems = randomInt(1, 6);
+            let subtotal = 0;
+            const lineItems = [];
+
+            // Weighted random status
+            const rand = Math.random();
+            let status: 'EMIS' | 'RECLAME' | 'REMBOURSE' | 'ANNULE' = 'EMIS';
+            let cumulative = 0;
+            for (let j = 0; j < statuses.length; j++) {
+                cumulative += statusWeights[j];
+                if (rand <= cumulative) {
+                    status = statuses[j];
+                    break;
+                }
+            }
+
+            for (let j = 0; j < numItems; j++) {
+                const quantity = randomInt(1, 3);
+                const unitPrice = randomFloat(5, 150);
+                lineItems.push({
+                    category: randomChoice(categories),
+                    productName: `Produit ${randomChoice(['Premium', 'Standard', 'Éco', 'Luxe'])} ${randomInt(1, 200)}`,
+                    quantity,
+                    unitPrice,
+                });
+                subtotal += quantity * unitPrice;
+            }
+
+            await prisma.receipt.create({
+                data: {
+                    posId: terminal.id,
+                    storeId: store.id,
+                    customerId: customer?.id,
+                    status,
+                    totalAmount: subtotal,
+                    currency: 'EUR',
+                    createdAt: receiptDate,
+                    lineItems: {
+                        create: lineItems,
+                    },
+                },
+            });
+        }
+
+        revalidatePath('/');
+        revalidatePath('/tickets');
+        revalidatePath('/clients');
+        revalidatePath('/accueil');
+        return { success: true, message: `Generated ${newCustomersCount} new customers and ${receiptsCount} new tickets` };
+    } catch (error) {
+        console.error('Failed to generate new tickets and clients:', error);
+        return { error: 'Failed to generate new tickets and clients' };
+    }
+}

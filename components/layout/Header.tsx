@@ -9,7 +9,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
-import { DemoDataButton } from '@/components/demo-data-button'
+import { GenerateDataButton } from '@/components/generate-data-button'
 
 export function Header({ stores }: { stores: Array<{ id: string; name: string }> }) {
   const [selectedStore, setSelectedStore] = useState<string>('all')
@@ -32,6 +32,7 @@ export function Header({ stores }: { stores: Array<{ id: string; name: string }>
         </Select>
       </div>
       <div className="flex items-center gap-4">
+        <GenerateDataButton />
         <div className="text-right">
           <div className="text-sm font-medium text-gray-900">Admin Swiim</div>
         </div>

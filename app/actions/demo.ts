@@ -161,7 +161,7 @@ export async function generateNewTicketsAndClients() {
         }
 
         // Get existing customers or create new ones
-        let existingCustomers = [];
+        let existingCustomers: Array<{ id: string; firstName: string; lastName: string; email: string }> = [];
         try {
             existingCustomers = await prisma.customer.findMany();
         } catch (error) {

@@ -9,10 +9,17 @@ export default async function DashboardLayout({
 }: {
   children: React.ReactNode
 }) {
-  const stores = await prisma.store.findMany({
-    select: { id: true, name: true },
-    orderBy: { name: 'asc' },
-  })
+  let stores: Array<{ id: string; name: string }> = []
+  
+  try {
+    stores = await prisma.store.findMany({
+      select: { id: true, name: true },
+      orderBy: { name: 'asc' },
+    })
+  } catch (error) {
+    console.error('Error fetching stores:', error)
+    // Continue with empty stores array to prevent layout crash
+  }
 
   return (
     <div className="flex min-h-screen bg-[#F5F5F7]">

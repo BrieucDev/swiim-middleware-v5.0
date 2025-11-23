@@ -84,6 +84,10 @@ async function getCustomers(searchParams: { query?: string; tier?: string; activ
       }
       return true
     })
+  } catch (error) {
+    console.error('Error fetching customers:', error)
+    return []
+  }
 }
 
 export default async function ClientsPage({

@@ -176,17 +176,19 @@ export async function generateNewTicketsAndClients() {
         }
 
         // Get existing stores (try with userId first, then all stores) with retry
-        // Use $queryRaw to avoid prepared statement conflicts
+        // Use $queryRawUnsafe to completely avoid prepared statements
         let stores: Array<{ id: string; name: string; userId: string | null }> = [];
         try {
             const session = await auth();
             if (session?.user?.id) {
                 const userId = session.user.id;
                 stores = await retryQuery(async () => {
-                    // Use raw query to avoid prepared statement issues
-                    const result = await prisma.$queryRaw<Array<{ id: string; name: string; userId: string | null }>>`
-                        SELECT id, name, "userId" FROM "Store" WHERE "userId" = ${userId}
-                    `;
+                    // Use $queryRawUnsafe to avoid prepared statement issues completely
+                    // This executes raw SQL without preparing statements
+                    const result = await prisma.$queryRawUnsafe<Array<{ id: string; name: string; userId: string | null }>>(
+                        `SELECT id, name, "userId" FROM "Store" WHERE "userId" = $1`,
+                        userId
+                    );
                     return result;
                 }, 3, 300);
             }
@@ -198,14 +200,14 @@ export async function generateNewTicketsAndClients() {
             console.log('Auth check failed, using all stores:', error);
         }
         
-        // If no stores found with userId, get all stores with retry using raw query
+        // If no stores found with userId, get all stores with retry using unsafe raw query
         if (stores.length === 0) {
             try {
                 stores = await retryQuery(async () => {
-                    // Use raw query to avoid prepared statement issues
-                    const result = await prisma.$queryRaw<Array<{ id: string; name: string; userId: string | null }>>`
-                        SELECT id, name, "userId" FROM "Store"
-                    `;
+                    // Use $queryRawUnsafe to avoid prepared statement issues completely
+                    const result = await prisma.$queryRawUnsafe<Array<{ id: string; name: string; userId: string | null }>>(
+                        `SELECT id, name, "userId" FROM "Store"`
+                    );
                     return result;
                 }, 3, 300);
             } catch (error) {
@@ -240,14 +242,14 @@ export async function generateNewTicketsAndClients() {
             return { error: 'No terminals found. Please create a terminal first.' };
         }
 
-        // Get existing customers with retry using raw query
+        // Get existing customers with retry using unsafe raw query
         let existingCustomers: Array<{ id: string; firstName: string; lastName: string; email: string }> = [];
         try {
             existingCustomers = await retryQuery(async () => {
-                // Use raw query to avoid prepared statement issues
-                const result = await prisma.$queryRaw<Array<{ id: string; firstName: string; lastName: string; email: string }>>`
-                    SELECT id, "firstName", "lastName", email FROM "Customer"
-                `;
+                // Use $queryRawUnsafe to avoid prepared statement issues completely
+                const result = await prisma.$queryRawUnsafe<Array<{ id: string; firstName: string; lastName: string; email: string }>>(
+                    `SELECT id, "firstName", "lastName", email FROM "Customer"`
+                );
                 return result;
             }, 3, 300);
         } catch (error) {

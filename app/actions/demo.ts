@@ -187,10 +187,8 @@ export async function generateNewTicketsAndClients() {
         let stores: Array<{ id: string; name: string; userId: string | null }> = [];
         
         try {
-            const { Pool } = await import('pg');
             const pool = new Pool({
                 connectionString: process.env.DATABASE_URL,
-                // Use transaction mode to avoid prepared statements
                 max: 1, // Single connection for this query
             });
             
@@ -198,7 +196,8 @@ export async function generateNewTicketsAndClients() {
                 const session = await auth();
                 if (session?.user?.id) {
                     const userId = session.user.id;
-                    // Use direct PostgreSQL query with parameterized query (but not prepared statement)
+                    // Use direct PostgreSQL query with parameterized query
+                    // pg uses parameterized queries but doesn't create persistent prepared statements
                     const result = await pool.query(
                         'SELECT id, name, "userId" FROM "Store" WHERE "userId" = $1',
                         [userId]
@@ -232,9 +231,9 @@ export async function generateNewTicketsAndClients() {
             
             // Close pool after use
             await pool.end();
-        } catch (importError) {
-            // Fallback to Prisma if pg is not available
-            console.warn('pg library not available, falling back to Prisma:', importError);
+        } catch (pgError) {
+            // Fallback to Prisma if pg fails
+            console.warn('pg connection failed, falling back to Prisma:', pgError);
             const session = await auth();
             if (session?.user?.id) {
                 const userId = session.user.id;
@@ -273,7 +272,6 @@ export async function generateNewTicketsAndClients() {
         // Get existing customers using direct PostgreSQL connection
         let existingCustomers: Array<{ id: string; firstName: string; lastName: string; email: string }> = [];
         try {
-            const { Pool } = await import('pg');
             const customerPool = new Pool({
                 connectionString: process.env.DATABASE_URL,
                 max: 1,
@@ -287,9 +285,9 @@ export async function generateNewTicketsAndClients() {
             } finally {
                 await customerPool.end();
             }
-        } catch (importError) {
-            // Fallback to Prisma if pg is not available
-            console.warn('pg library not available for customers, using Prisma:', importError);
+        } catch (pgError) {
+            // Fallback to Prisma if pg fails
+            console.warn('pg connection failed for customers, using Prisma:', pgError);
             existingCustomers = await retryQueryWithFreshClient(async (client) => {
                 return await client.customer.findMany();
             }, 2, 200);

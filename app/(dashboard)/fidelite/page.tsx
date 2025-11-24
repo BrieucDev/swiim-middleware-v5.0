@@ -19,6 +19,8 @@ import { CampaignCreator } from '@/components/fidelite/CampaignCreator'
 import { ImpactSimulator } from '@/components/fidelite/ImpactSimulator'
 import { KpiCard } from '@/components/dashboard/kpi-card'
 import { Users, Coins, TrendingUp, Euro } from 'lucide-react'
+import { initializeLoyaltyProgram } from '@/app/actions/loyalty'
+import { InitializeProgramButton } from '@/components/fidelite/InitializeProgramButton'
 
 export const dynamic = 'force-dynamic'
 
@@ -102,18 +104,40 @@ async function getCampaigns() {
 }
 
 export default async function FidelitePage() {
-  const stats = await getLoyaltyStats()
+  let stats
+  let error: string | null = null
+  
+  try {
+    stats = await getLoyaltyStats()
+  } catch (err) {
+    console.error('[FidelitePage] Error fetching loyalty stats:', err)
+    error = err instanceof Error ? err.message : 'Erreur inconnue'
+  }
+  
   const topCustomers = await getTopLoyalCustomers()
   const campaigns = await getCampaigns()
 
   if (!stats) {
     return (
-      <div className="space-y-8">
+      <div className="space-y-8 p-6">
         <div>
-          <h1 className="text-3xl font-bold">Fidélité</h1>
-          <p className="text-muted-foreground mt-2">
+          <h1 className="text-3xl font-bold text-gray-900">Fidélité</h1>
+          <p className="text-gray-500 mt-2">
             Aucun programme de fidélité configuré
           </p>
+          {error && (
+            <div className="mt-4 p-4 bg-red-50 border border-red-200 rounded-lg">
+              <p className="text-sm text-red-800">
+                <strong>Erreur:</strong> {error}
+              </p>
+              <p className="text-xs text-red-600 mt-2">
+                Vérifiez que les tables LoyaltyProgram et LoyaltyTier existent dans votre base de données Supabase.
+              </p>
+            </div>
+          )}
+          <div className="mt-6">
+            <InitializeProgramButton />
+          </div>
         </div>
       </div>
     )

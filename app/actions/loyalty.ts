@@ -3,6 +3,82 @@
 import { prisma } from '@/lib/prisma'
 import { revalidatePath } from 'next/cache'
 
+export async function initializeLoyaltyProgram() {
+  try {
+    // Check if program already exists
+    const existing = await prisma.loyaltyProgram.findFirst()
+    if (existing) {
+      return { success: true, message: 'Programme déjà existant', programId: existing.id }
+    }
+
+    // Create default program
+    const program = await prisma.loyaltyProgram.create({
+      data: {
+        name: 'Programme de fidélité Swiim',
+        description: 'Programme de fidélité par défaut',
+        pointsPerEuro: 1,
+        conversionRate: 100,
+        conversionValue: 5,
+        bonusCategories: {
+          'Livres': 2,
+          'Vinyles': 2,
+        },
+        pointsExpiryDays: 365,
+      },
+    })
+
+    // Create default tiers
+    await prisma.loyaltyTier.createMany({
+      data: [
+        {
+          programId: program.id,
+          name: 'Bronze',
+          minSpend: 0,
+          maxSpend: 100,
+          benefits: {
+            'Points standard': '1 point par euro',
+          },
+          sortOrder: 1,
+        },
+        {
+          programId: program.id,
+          name: 'Argent',
+          minSpend: 100,
+          maxSpend: 500,
+          benefits: {
+            'Points bonus': '1.5 points par euro',
+            'Remise': '5% sur les achats',
+          },
+          sortOrder: 2,
+        },
+        {
+          programId: program.id,
+          name: 'Or',
+          minSpend: 500,
+          maxSpend: null,
+          benefits: {
+            'Points premium': '2 points par euro',
+            'Remise': '10% sur les achats',
+            'Livraison gratuite': 'Toujours',
+          },
+          sortOrder: 3,
+        },
+      ],
+    })
+
+    revalidatePath('/fidelite')
+    return { success: true, message: 'Programme initialisé avec succès', programId: program.id }
+  } catch (error) {
+    console.error('Error initializing loyalty program:', error)
+    const errorMessage = error instanceof Error ? error.message : 'Erreur inconnue'
+    return { 
+      success: false, 
+      error: `Échec de l'initialisation: ${errorMessage}`,
+      details: error instanceof Error ? error.stack : undefined
+    }
+  }
+}
+
 export async function updateProgramRules(programId: string, rules: {
   pointsPerEuro?: number
   conversionRate?: number

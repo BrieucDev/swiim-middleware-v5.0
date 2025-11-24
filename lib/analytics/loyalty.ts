@@ -3,6 +3,8 @@ import { Decimal } from '@prisma/client/runtime/library'
 
 async function initializeDefaultLoyaltyProgram() {
   try {
+    console.log('[Loyalty] Starting initialization of default program...')
+    
     // Check if a program already exists
     const existing = await prisma.loyaltyProgram.findFirst({
       include: {
@@ -21,9 +23,11 @@ async function initializeDefaultLoyaltyProgram() {
       },
     })
     if (existing) {
+      console.log('[Loyalty] Program already exists, returning it')
       return existing
     }
 
+    console.log('[Loyalty] Creating default program...')
     // Create default program
     const program = await prisma.loyaltyProgram.create({
       data: {
@@ -39,8 +43,10 @@ async function initializeDefaultLoyaltyProgram() {
         pointsExpiryDays: 365,
       },
     })
+    console.log('[Loyalty] Program created:', program.id)
 
     // Create default tiers
+    console.log('[Loyalty] Creating default tiers...')
     await prisma.loyaltyTier.create({
       data: {
         programId: program.id,
@@ -53,6 +59,7 @@ async function initializeDefaultLoyaltyProgram() {
         sortOrder: 1,
       },
     })
+    console.log('[Loyalty] Bronze tier created')
 
     await prisma.loyaltyTier.create({
       data: {
@@ -67,6 +74,7 @@ async function initializeDefaultLoyaltyProgram() {
         sortOrder: 2,
       },
     })
+    console.log('[Loyalty] Argent tier created')
 
     await prisma.loyaltyTier.create({
       data: {
@@ -82,9 +90,11 @@ async function initializeDefaultLoyaltyProgram() {
         sortOrder: 3,
       },
     })
+    console.log('[Loyalty] Or tier created')
 
     // Return program with all relations
-    return await prisma.loyaltyProgram.findFirst({
+    console.log('[Loyalty] Fetching program with relations...')
+    const programWithRelations = await prisma.loyaltyProgram.findFirst({
       where: { id: program.id },
       include: {
         accounts: {
@@ -101,14 +111,27 @@ async function initializeDefaultLoyaltyProgram() {
         campaigns: true,
       },
     })
+    
+    if (!programWithRelations) {
+      console.error('[Loyalty] Failed to fetch program with relations')
+      return null
+    }
+    
+    console.log('[Loyalty] Program initialized successfully with', programWithRelations.tiers.length, 'tiers')
+    return programWithRelations
   } catch (error) {
-    console.error('Error initializing default loyalty program:', error)
+    console.error('[Loyalty] Error initializing default loyalty program:', error)
+    if (error instanceof Error) {
+      console.error('[Loyalty] Error message:', error.message)
+      console.error('[Loyalty] Error stack:', error.stack)
+    }
     return null
   }
 }
 
 export async function getLoyaltyStats() {
   try {
+    // First, try to find existing program
     let program = await prisma.loyaltyProgram.findFirst({
       include: {
         accounts: {
@@ -128,10 +151,15 @@ export async function getLoyaltyStats() {
 
     // Initialize default program if none exists
     if (!program) {
+      console.log('[Loyalty] No program found, initializing default program...')
       program = await initializeDefaultLoyaltyProgram()
       if (!program) {
+        console.error('[Loyalty] Failed to initialize default program')
         return null
       }
+      console.log('[Loyalty] Default program initialized successfully:', program.id)
+    } else {
+      console.log('[Loyalty] Found existing program:', program.id)
     }
 
     const accounts = program.accounts

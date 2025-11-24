@@ -5,12 +5,33 @@ import { auth } from '@/auth';
 import { revalidatePath } from 'next/cache';
 import { Pool } from 'pg';
 
+function normalizeDatabaseUrl(rawUrl?: string) {
+    if (!rawUrl) {
+        throw new Error('DATABASE_URL environment variable is not configured.');
+    }
+    if (!rawUrl.startsWith('postgresql://') && !rawUrl.startsWith('postgres://')) {
+        throw new Error('DATABASE_URL must start with postgresql:// or postgres://');
+    }
+    if (!rawUrl.includes('sslmode=')) {
+        const separator = rawUrl.includes('?') ? '&' : '?';
+        rawUrl = `${rawUrl}${separator}sslmode=require`;
+    }
+    return rawUrl;
+}
+
+const DATABASE_URL = normalizeDatabaseUrl(process.env.DATABASE_URL);
+process.env.DATABASE_URL = DATABASE_URL;
 
 // Create a fresh Prisma instance for this action to avoid prepared statement conflicts
 // This is necessary in serverless environments with connection pooling
 function getFreshPrismaClient() {
     return new PrismaClient({
         log: process.env.NODE_ENV === "development" ? ["error"] : ["error"],
+        datasources: {
+            db: {
+                url: DATABASE_URL,
+            },
+        },
     });
 }
 
@@ -188,7 +209,7 @@ export async function generateNewTicketsAndClients() {
         
         try {
             const pool = new Pool({
-                connectionString: process.env.DATABASE_URL,
+                connectionString: DATABASE_URL,
                 max: 1, // Single connection for this query
                 ssl: {
                     rejectUnauthorized: false, // Required for Supabase certificates
@@ -276,7 +297,7 @@ export async function generateNewTicketsAndClients() {
         let existingCustomers: Array<{ id: string; firstName: string; lastName: string; email: string }> = [];
         try {
             const customerPool = new Pool({
-                connectionString: process.env.DATABASE_URL,
+                connectionString: DATABASE_URL,
                 max: 1,
                 ssl: {
                     rejectUnauthorized: false,

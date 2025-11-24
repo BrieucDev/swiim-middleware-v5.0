@@ -346,7 +346,7 @@ export default async function FidelitePage() {
         <TabsContent value="tiers" className="space-y-4">
           <div className="grid gap-6 md:grid-cols-3">
             {stats.tierDistribution.map((tierInfo) => {
-              const tier = stats.program.tiers.find(t => t.name === tierInfo.tier)
+              const tier = stats.program.tiers.find((t: { name: string }) => t.name === tierInfo.tier)
               if (!tier) return null
 
               const benefits = tier.benefits as Record<string, any> || {}

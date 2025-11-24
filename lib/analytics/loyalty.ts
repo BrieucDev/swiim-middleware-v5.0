@@ -4,7 +4,22 @@ import { Decimal } from '@prisma/client/runtime/library'
 async function initializeDefaultLoyaltyProgram() {
   try {
     // Check if a program already exists
-    const existing = await prisma.loyaltyProgram.findFirst()
+    const existing = await prisma.loyaltyProgram.findFirst({
+      include: {
+        accounts: {
+          include: {
+            tier: true,
+            customer: true,
+          },
+        },
+        tiers: {
+          orderBy: {
+            sortOrder: 'asc',
+          },
+        },
+        campaigns: true,
+      },
+    })
     if (existing) {
       return existing
     }
@@ -26,7 +41,7 @@ async function initializeDefaultLoyaltyProgram() {
     })
 
     // Create default tiers
-    const bronze = await prisma.loyaltyTier.create({
+    await prisma.loyaltyTier.create({
       data: {
         programId: program.id,
         name: 'Bronze',
@@ -39,7 +54,7 @@ async function initializeDefaultLoyaltyProgram() {
       },
     })
 
-    const argent = await prisma.loyaltyTier.create({
+    await prisma.loyaltyTier.create({
       data: {
         programId: program.id,
         name: 'Argent',
@@ -53,7 +68,7 @@ async function initializeDefaultLoyaltyProgram() {
       },
     })
 
-    const or = await prisma.loyaltyTier.create({
+    await prisma.loyaltyTier.create({
       data: {
         programId: program.id,
         name: 'Or',
@@ -68,7 +83,24 @@ async function initializeDefaultLoyaltyProgram() {
       },
     })
 
-    return program
+    // Return program with all relations
+    return await prisma.loyaltyProgram.findFirst({
+      where: { id: program.id },
+      include: {
+        accounts: {
+          include: {
+            tier: true,
+            customer: true,
+          },
+        },
+        tiers: {
+          orderBy: {
+            sortOrder: 'asc',
+          },
+        },
+        campaigns: true,
+      },
+    })
   } catch (error) {
     console.error('Error initializing default loyalty program:', error)
     return null
@@ -97,27 +129,6 @@ export async function getLoyaltyStats() {
     // Initialize default program if none exists
     if (!program) {
       program = await initializeDefaultLoyaltyProgram()
-      if (!program) {
-        return null
-      }
-      // Re-fetch with all relations
-      program = await prisma.loyaltyProgram.findFirst({
-        where: { id: program.id },
-        include: {
-          accounts: {
-            include: {
-              tier: true,
-              customer: true,
-            },
-          },
-          tiers: {
-            orderBy: {
-              sortOrder: 'asc',
-            },
-          },
-          campaigns: true,
-        },
-      })
       if (!program) {
         return null
       }

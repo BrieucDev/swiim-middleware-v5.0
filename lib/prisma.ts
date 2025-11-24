@@ -5,7 +5,9 @@ const globalForPrisma = globalThis as unknown as {
 }
 
 // Configuration optimized for serverless environments
-const prismaClientOptions = {
+const prismaClientOptions: {
+  log?: Array<'query' | 'info' | 'warn' | 'error'>
+} = {
   log: process.env.NODE_ENV === "development" ? ["query", "error", "warn"] : ["error"],
   // Disable prepared statements in serverless to avoid conflicts
   // This is handled at the connection string level with ?pgbouncer=true

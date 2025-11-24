@@ -3,74 +3,121 @@
 import { prisma } from '@/lib/prisma'
 import { revalidatePath } from 'next/cache'
 
+async function retryQuery<T>(
+  queryFn: () => Promise<T>,
+  maxRetries: number = 3,
+  delay: number = 100
+): Promise<T> {
+  for (let i = 0; i < maxRetries; i++) {
+    try {
+      return await queryFn()
+    } catch (error: any) {
+      const isPreparedStatementError = error?.message?.includes('prepared statement') && 
+                                       error?.message?.includes('already exists')
+      
+      if (isPreparedStatementError && i < maxRetries - 1) {
+        // Wait before retrying
+        await new Promise(resolve => setTimeout(resolve, delay * (i + 1)))
+        continue
+      }
+      throw error
+    }
+  }
+  throw new Error('Max retries exceeded')
+}
+
 export async function initializeLoyaltyProgram() {
   try {
-    // Check if program already exists
-    const existing = await prisma.loyaltyProgram.findFirst()
+    // Check if program already exists with retry
+    const existing = await retryQuery(async () => {
+      return await prisma.loyaltyProgram.findFirst()
+    })
+    
     if (existing) {
       return { success: true, message: 'Programme déjà existant', programId: existing.id }
     }
 
-    // Create default program
-    const program = await prisma.loyaltyProgram.create({
-      data: {
-        name: 'Programme de fidélité Swiim',
-        description: 'Programme de fidélité par défaut',
-        pointsPerEuro: 1,
-        conversionRate: 100,
-        conversionValue: 5,
-        bonusCategories: {
-          'Livres': 2,
-          'Vinyles': 2,
+    // Use transaction to ensure atomicity and avoid prepared statement conflicts
+    const result = await prisma.$transaction(async (tx) => {
+      // Create default program
+      const program = await tx.loyaltyProgram.create({
+        data: {
+          name: 'Programme de fidélité Swiim',
+          description: 'Programme de fidélité par défaut',
+          pointsPerEuro: 1,
+          conversionRate: 100,
+          conversionValue: 5,
+          bonusCategories: {
+            'Livres': 2,
+            'Vinyles': 2,
+          },
+          pointsExpiryDays: 365,
         },
-        pointsExpiryDays: 365,
-      },
-    })
+      })
 
-    // Create default tiers
-    await prisma.loyaltyTier.createMany({
-      data: [
-        {
-          programId: program.id,
-          name: 'Bronze',
-          minSpend: 0,
-          maxSpend: 100,
-          benefits: {
-            'Points standard': '1 point par euro',
+      // Create default tiers
+      await tx.loyaltyTier.createMany({
+        data: [
+          {
+            programId: program.id,
+            name: 'Bronze',
+            minSpend: 0,
+            maxSpend: 100,
+            benefits: {
+              'Points standard': '1 point par euro',
+            },
+            sortOrder: 1,
           },
-          sortOrder: 1,
-        },
-        {
-          programId: program.id,
-          name: 'Argent',
-          minSpend: 100,
-          maxSpend: 500,
-          benefits: {
-            'Points bonus': '1.5 points par euro',
-            'Remise': '5% sur les achats',
+          {
+            programId: program.id,
+            name: 'Argent',
+            minSpend: 100,
+            maxSpend: 500,
+            benefits: {
+              'Points bonus': '1.5 points par euro',
+              'Remise': '5% sur les achats',
+            },
+            sortOrder: 2,
           },
-          sortOrder: 2,
-        },
-        {
-          programId: program.id,
-          name: 'Or',
-          minSpend: 500,
-          maxSpend: null,
-          benefits: {
-            'Points premium': '2 points par euro',
-            'Remise': '10% sur les achats',
-            'Livraison gratuite': 'Toujours',
+          {
+            programId: program.id,
+            name: 'Or',
+            minSpend: 500,
+            maxSpend: null,
+            benefits: {
+              'Points premium': '2 points par euro',
+              'Remise': '10% sur les achats',
+              'Livraison gratuite': 'Toujours',
+            },
+            sortOrder: 3,
           },
-          sortOrder: 3,
-        },
-      ],
+        ],
+      })
+
+      return program
+    }, {
+      maxWait: 10000, // 10 seconds
+      timeout: 20000, // 20 seconds
     })
 
     revalidatePath('/fidelite')
-    return { success: true, message: 'Programme initialisé avec succès', programId: program.id }
+    return { success: true, message: 'Programme initialisé avec succès', programId: result.id }
   } catch (error) {
     console.error('Error initializing loyalty program:', error)
     const errorMessage = error instanceof Error ? error.message : 'Erreur inconnue'
+    
+    // Check if it's a prepared statement error
+    const isPreparedStatementError = errorMessage.includes('prepared statement') && 
+                                     errorMessage.includes('already exists')
+    
+    if (isPreparedStatementError) {
+      return { 
+        success: false, 
+        error: 'Erreur de connexion à la base de données. Veuillez réessayer dans quelques instants.',
+        details: 'Cette erreur est temporaire et se produit parfois dans les environnements serverless. Réessayez dans quelques secondes.'
+      }
+    }
+    
     return { 
       success: false, 
       error: `Échec de l'initialisation: ${errorMessage}`,

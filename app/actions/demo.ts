@@ -175,14 +175,19 @@ export async function generateNewTicketsAndClients() {
         }
 
         // Get existing stores (try with userId first, then all stores) with retry
+        // Use $queryRaw to avoid prepared statement conflicts
         let stores: Array<{ id: string; name: string; userId: string | null }> = [];
         try {
             const session = await auth();
             if (session?.user?.id) {
                 const userId = session.user.id;
                 stores = await retryQuery(async () => {
-                    return await prisma.store.findMany({ where: { userId } });
-                }, 2, 200);
+                    // Use raw query to avoid prepared statement issues
+                    const result = await prisma.$queryRaw<Array<{ id: string; name: string; userId: string | null }>>`
+                        SELECT id, name, "userId" FROM "Store" WHERE "userId" = ${userId}
+                    `;
+                    return result;
+                }, 3, 300);
             }
         } catch (error) {
             const errorMessage = error instanceof Error ? error.message : String(error);
@@ -192,12 +197,16 @@ export async function generateNewTicketsAndClients() {
             console.log('Auth check failed, using all stores:', error);
         }
         
-        // If no stores found with userId, get all stores with retry
+        // If no stores found with userId, get all stores with retry using raw query
         if (stores.length === 0) {
             try {
                 stores = await retryQuery(async () => {
-                    return await prisma.store.findMany();
-                }, 2, 200);
+                    // Use raw query to avoid prepared statement issues
+                    const result = await prisma.$queryRaw<Array<{ id: string; name: string; userId: string | null }>>`
+                        SELECT id, name, "userId" FROM "Store"
+                    `;
+                    return result;
+                }, 3, 300);
             } catch (error) {
                 console.error('Error fetching stores:', error);
                 const errorMessage = error instanceof Error ? error.message : String(error);
@@ -212,14 +221,20 @@ export async function generateNewTicketsAndClients() {
             return { error: 'No stores found. Please create a store first.' };
         }
 
-        // Get existing terminals with retry
-        let terminals = [];
+        // Get existing terminals with retry using raw query
+        let terminals: Array<{ id: string; storeId: string; name: string; identifier: string }> = [];
         try {
-            terminals = await retryQuery(async () => {
-                return await prisma.posTerminal.findMany({
-                    where: { storeId: { in: stores.map(s => s.id) } },
-                });
-            }, 2, 200);
+            const storeIds = stores.map(s => s.id);
+            if (storeIds.length > 0) {
+                terminals = await retryQuery(async () => {
+                    // Use raw query to avoid prepared statement issues
+                    const result = await prisma.$queryRaw<Array<{ id: string; storeId: string; name: string; identifier: string }>>`
+                        SELECT id, "storeId", name, identifier FROM "PosTerminal" 
+                        WHERE "storeId" = ANY(${storeIds}::text[])
+                    `;
+                    return result;
+                }, 3, 300);
+            }
         } catch (error) {
             console.error('Error fetching terminals:', error);
             return { error: `Error fetching terminals: ${error instanceof Error ? error.message : 'Unknown error'}` };
@@ -229,12 +244,16 @@ export async function generateNewTicketsAndClients() {
             return { error: 'No terminals found. Please create a terminal first.' };
         }
 
-        // Get existing customers with retry
+        // Get existing customers with retry using raw query
         let existingCustomers: Array<{ id: string; firstName: string; lastName: string; email: string }> = [];
         try {
             existingCustomers = await retryQuery(async () => {
-                return await prisma.customer.findMany();
-            }, 2, 200);
+                // Use raw query to avoid prepared statement issues
+                const result = await prisma.$queryRaw<Array<{ id: string; firstName: string; lastName: string; email: string }>>`
+                    SELECT id, "firstName", "lastName", email FROM "Customer"
+                `;
+                return result;
+            }, 3, 300);
         } catch (error) {
             console.error('Error fetching existing customers:', error);
             // Continue anyway, we'll create new ones

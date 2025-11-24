@@ -3,6 +3,8 @@
 import { PrismaClient } from '@prisma/client';
 import { auth } from '@/auth';
 import { revalidatePath } from 'next/cache';
+import { Pool } from 'pg';
+
 
 // Create a fresh Prisma instance for this action to avoid prepared statement conflicts
 // This is necessary in serverless environments with connection pooling
@@ -180,49 +182,70 @@ export async function generateNewTicketsAndClients() {
             return { error: `Database connection failed: ${errorMessage}` };
         }
 
-        // Get existing stores (try with userId first, then all stores) with fresh client
-        // Use fresh Prisma instance for each query to avoid prepared statement conflicts
+        // Get existing stores using direct PostgreSQL connection to avoid prepared statements
+        // Use pg library directly to bypass Prisma's prepared statements completely
         let stores: Array<{ id: string; name: string; userId: string | null }> = [];
+        
         try {
+            const { Pool } = await import('pg');
+            const pool = new Pool({
+                connectionString: process.env.DATABASE_URL,
+                // Use transaction mode to avoid prepared statements
+                max: 1, // Single connection for this query
+            });
+            
+            try {
+                const session = await auth();
+                if (session?.user?.id) {
+                    const userId = session.user.id;
+                    // Use direct PostgreSQL query with parameterized query (but not prepared statement)
+                    const result = await pool.query(
+                        'SELECT id, name, "userId" FROM "Store" WHERE "userId" = $1',
+                        [userId]
+                    );
+                    stores = result.rows as Array<{ id: string; name: string; userId: string | null }>;
+                }
+            } catch (error) {
+                const errorMessage = error instanceof Error ? error.message : String(error);
+                if (errorMessage.includes('DATABASE_URL') || errorMessage.includes('Environment variable not found')) {
+                    await pool.end();
+                    return { error: 'Database connection not configured. Please check your DATABASE_URL environment variable in Vercel project settings (Settings → Environment Variables).' };
+                }
+                console.log('Auth check failed, using all stores:', error);
+            }
+            
+            // If no stores found with userId, get all stores
+            if (stores.length === 0) {
+                try {
+                    const result = await pool.query('SELECT id, name, "userId" FROM "Store"');
+                    stores = result.rows as Array<{ id: string; name: string; userId: string | null }>;
+                } catch (error) {
+                    console.error('Error fetching stores:', error);
+                    const errorMessage = error instanceof Error ? error.message : String(error);
+                    await pool.end();
+                    if (errorMessage.includes('DATABASE_URL') || errorMessage.includes('Environment variable not found')) {
+                        return { error: 'Database connection not configured. Please check your DATABASE_URL environment variable in Vercel project settings (Settings → Environment Variables).' };
+                    }
+                    return { error: `Error fetching stores: ${errorMessage}` };
+                }
+            }
+            
+            // Close pool after use
+            await pool.end();
+        } catch (importError) {
+            // Fallback to Prisma if pg is not available
+            console.warn('pg library not available, falling back to Prisma:', importError);
             const session = await auth();
             if (session?.user?.id) {
                 const userId = session.user.id;
-                // Escape userId to prevent SQL injection (it's already a string from auth, but be safe)
-                const escapedUserId = userId.replace(/'/g, "''");
                 stores = await retryQueryWithFreshClient(async (client) => {
-                    // Use $queryRawUnsafe without parameters - embed value directly (safely escaped)
-                    // This completely avoids prepared statements
-                    const result = await client.$queryRawUnsafe<Array<{ id: string; name: string; userId: string | null }>>(
-                        `SELECT id, name, "userId" FROM "Store" WHERE "userId" = '${escapedUserId}'`
-                    );
-                    return result;
-                }, 3, 300);
+                    return await client.store.findMany({ where: { userId } });
+                }, 2, 200);
             }
-        } catch (error) {
-            const errorMessage = error instanceof Error ? error.message : String(error);
-            if (errorMessage.includes('DATABASE_URL') || errorMessage.includes('Environment variable not found')) {
-                return { error: 'Database connection not configured. Please check your DATABASE_URL environment variable in Vercel project settings (Settings → Environment Variables).' };
-            }
-            console.log('Auth check failed, using all stores:', error);
-        }
-        
-        // If no stores found with userId, get all stores with fresh client
-        if (stores.length === 0) {
-            try {
+            if (stores.length === 0) {
                 stores = await retryQueryWithFreshClient(async (client) => {
-                    // Use $queryRawUnsafe with fresh client to avoid prepared statement issues
-                    const result = await client.$queryRawUnsafe<Array<{ id: string; name: string; userId: string | null }>>(
-                        `SELECT id, name, "userId" FROM "Store"`
-                    );
-                    return result;
-                }, 3, 300);
-            } catch (error) {
-                console.error('Error fetching stores:', error);
-                const errorMessage = error instanceof Error ? error.message : String(error);
-                if (errorMessage.includes('DATABASE_URL') || errorMessage.includes('Environment variable not found')) {
-                    return { error: 'Database connection not configured. Please check your DATABASE_URL environment variable in Vercel project settings (Settings → Environment Variables).' };
-                }
-                return { error: `Error fetching stores: ${errorMessage}` };
+                    return await client.store.findMany();
+                }, 2, 200);
             }
         }
         
@@ -247,19 +270,29 @@ export async function generateNewTicketsAndClients() {
             return { error: 'No terminals found. Please create a terminal first.' };
         }
 
-        // Get existing customers with fresh client
+        // Get existing customers using direct PostgreSQL connection
         let existingCustomers: Array<{ id: string; firstName: string; lastName: string; email: string }> = [];
         try {
+            const { Pool } = await import('pg');
+            const customerPool = new Pool({
+                connectionString: process.env.DATABASE_URL,
+                max: 1,
+            });
+            try {
+                const result = await customerPool.query('SELECT id, "firstName", "lastName", email FROM "Customer"');
+                existingCustomers = result.rows as Array<{ id: string; firstName: string; lastName: string; email: string }>;
+            } catch (error) {
+                console.error('Error fetching existing customers:', error);
+                // Continue anyway, we'll create new ones
+            } finally {
+                await customerPool.end();
+            }
+        } catch (importError) {
+            // Fallback to Prisma if pg is not available
+            console.warn('pg library not available for customers, using Prisma:', importError);
             existingCustomers = await retryQueryWithFreshClient(async (client) => {
-                // Use $queryRawUnsafe with fresh client to avoid prepared statement issues
-                const result = await client.$queryRawUnsafe<Array<{ id: string; firstName: string; lastName: string; email: string }>>(
-                    `SELECT id, "firstName", "lastName", email FROM "Customer"`
-                );
-                return result;
-            }, 3, 300);
-        } catch (error) {
-            console.error('Error fetching existing customers:', error);
-            // Continue anyway, we'll create new ones
+                return await client.customer.findMany();
+            }, 2, 200);
         }
         const customers = [...existingCustomers];
 

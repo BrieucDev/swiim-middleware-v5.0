@@ -3,6 +3,7 @@
 import { prisma } from '@/lib/prisma';
 import { auth } from '@/auth';
 import { revalidatePath } from 'next/cache';
+import { Prisma } from '@prisma/client';
 
 const categories = ['Livres', 'Hi-Tech', 'Gaming', 'Vinyles', 'Accessoires', 'Musique', 'Cinéma'];
 const firstNames = ['Jean', 'Marie', 'Pierre', 'Sophie', 'Antoine', 'Camille', 'Lucas', 'Emma'];
@@ -228,16 +229,26 @@ export async function generateNewTicketsAndClients() {
             if (storeIds.length > 0) {
                 terminals = await retryQuery(async () => {
                     // Use raw query to avoid prepared statement issues
+                    // Use Prisma.sql for array parameters
                     const result = await prisma.$queryRaw<Array<{ id: string; storeId: string; name: string; identifier: string }>>`
                         SELECT id, "storeId", name, identifier FROM "PosTerminal" 
-                        WHERE "storeId" = ANY(${storeIds}::text[])
+                        WHERE "storeId" IN (${Prisma.join(storeIds.map(id => Prisma.sql`${id}`), Prisma.sql`, `)})
                     `;
                     return result;
                 }, 3, 300);
             }
         } catch (error) {
             console.error('Error fetching terminals:', error);
-            return { error: `Error fetching terminals: ${error instanceof Error ? error.message : 'Unknown error'}` };
+            // Fallback to regular query if raw query fails
+            try {
+                terminals = await retryQuery(async () => {
+                    return await prisma.posTerminal.findMany({
+                        where: { storeId: { in: stores.map(s => s.id) } },
+                    });
+                }, 2, 200);
+            } catch (fallbackError) {
+                return { error: `Error fetching terminals: ${fallbackError instanceof Error ? fallbackError.message : 'Unknown error'}` };
+            }
         }
         
         if (terminals.length === 0) {

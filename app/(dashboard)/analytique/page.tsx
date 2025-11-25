@@ -21,7 +21,40 @@ const toChartLabel = (isoDate: string) =>
   })
 
 export default async function AnalytiquePage() {
-  const data = await getAnalyticsOverview()
+  let data: Awaited<ReturnType<typeof getAnalyticsOverview>>
+  
+  try {
+    data = await getAnalyticsOverview()
+  } catch (error) {
+    console.error('[Analytics Page] Error fetching analytics:', error)
+    // Return fallback data with error flag
+    data = {
+      hasData: false,
+      overview: {
+        totalReceipts: 0,
+        totalRevenue: 0,
+        averageBasket: 0,
+        activeCustomers: 0,
+        identificationRate: 0,
+        digitalRate: 0,
+      },
+      trends: [],
+      stores: [],
+      categories: [],
+      identification: {
+        identifiedRevenueShare: 0,
+        identifiedAverageBasket: 0,
+        unidentifiedAverageBasket: 0,
+        identifiedFrequency: 0,
+      },
+      environment: {
+        digitalTicketsYear: 0,
+        paperSavedKg: 0,
+        co2SavedKg: 0,
+        treesEquivalent: 0,
+      },
+    }
+  }
 
   const ticketsChartData = data.trends.map((point) => ({
     date: toChartLabel(point.date),
@@ -57,9 +90,22 @@ export default async function AnalytiquePage() {
         <ExportButton />
       </div>
 
+      {!data.hasData && data.stores.length === 0 && data.trends.length === 0 && (
+        <Card className="bg-yellow-50 border-yellow-200 rounded-2xl shadow-sm">
+          <CardContent className="px-6 py-8">
+            <div className="text-center">
+              <p className="text-lg font-semibold text-yellow-900 mb-2">Aucune donnée disponible</p>
+              <p className="text-sm text-yellow-700 mb-4">
+                Les analytiques nécessitent des tickets dans la base de données. Créez des magasins et générez des tickets de démonstration pour voir les statistiques.
+              </p>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+      
       <section className="space-y-4">
         <div>
-          <h2 className="text-lg font-semibold text-gray-900">Vue d’ensemble (30 derniers jours)</h2>
+          <h2 className="text-lg font-semibold text-gray-900">Vue d'ensemble (30 derniers jours)</h2>
           <p className="text-sm text-gray-500">Principaux indicateurs business sur la période</p>
         </div>
         <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">

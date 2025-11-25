@@ -1,4 +1,5 @@
-import { loadPrisma } from './utils'
+import { retryWithFreshClient } from '@/lib/prisma'
+import type { PrismaClient } from '@prisma/client'
 
 type TrendPoint = {
   date: string
@@ -130,12 +131,6 @@ const FALLBACK_DATA: AnalyticsOverview = {
 }
 
 export async function getAnalyticsOverview(): Promise<AnalyticsOverview> {
-  const prisma = await loadPrisma()
-
-  if (!prisma) {
-    return FALLBACK_DATA
-  }
-
   try {
     const now = new Date()
     const startDate = new Date(now)
@@ -147,41 +142,74 @@ export async function getAnalyticsOverview(): Promise<AnalyticsOverview> {
     const yearStart = new Date(now)
     yearStart.setFullYear(yearStart.getFullYear() - 1)
 
+    // Use retryWithFreshClient to avoid prepared statement errors
     const [recentReceipts, previousReceipts, yearReceipts] = await Promise.all([
-      prisma.receipt.findMany({
-        where: {
-          createdAt: { gte: startDate },
-        },
-        include: {
-          store: true,
-          lineItems: true,
-        },
-      }),
-      prisma.receipt.findMany({
-        where: {
-          createdAt: {
-            gte: previousStart,
-            lt: startDate,
+      retryWithFreshClient(async (prisma: PrismaClient) => {
+        return await prisma.receipt.findMany({
+          where: {
+            createdAt: { gte: startDate },
           },
-        },
-        select: {
-          totalAmount: true,
-          customerId: true,
-          status: true,
-        },
+          include: {
+            store: true,
+            lineItems: true,
+          },
+        })
       }),
-      prisma.receipt.findMany({
-        where: {
-          createdAt: { gte: yearStart },
-        },
-        select: {
-          status: true,
-        },
+      retryWithFreshClient(async (prisma: PrismaClient) => {
+        return await prisma.receipt.findMany({
+          where: {
+            createdAt: {
+              gte: previousStart,
+              lt: startDate,
+            },
+          },
+          select: {
+            totalAmount: true,
+            customerId: true,
+            status: true,
+          },
+        })
+      }),
+      retryWithFreshClient(async (prisma: PrismaClient) => {
+        return await prisma.receipt.findMany({
+          where: {
+            createdAt: { gte: yearStart },
+          },
+          select: {
+            status: true,
+          },
+        })
       }),
     ])
 
+    // If no receipts found, return empty data (not fallback)
     if (recentReceipts.length === 0) {
-      return FALLBACK_DATA
+      return {
+        hasData: false,
+        overview: {
+          totalReceipts: 0,
+          totalRevenue: 0,
+          averageBasket: 0,
+          activeCustomers: 0,
+          identificationRate: 0,
+          digitalRate: 0,
+        },
+        trends: [],
+        stores: [],
+        categories: [],
+        identification: {
+          identifiedRevenueShare: 0,
+          identifiedAverageBasket: 0,
+          unidentifiedAverageBasket: 0,
+          identifiedFrequency: 0,
+        },
+        environment: {
+          digitalTicketsYear: 0,
+          paperSavedKg: 0,
+          co2SavedKg: 0,
+          treesEquivalent: 0,
+        },
+      }
     }
 
     const totalRevenue = recentReceipts.reduce(
@@ -354,7 +382,41 @@ export async function getAnalyticsOverview(): Promise<AnalyticsOverview> {
     }
   } catch (error) {
     console.error('[Analytics] Failed to build overview:', error)
-    return FALLBACK_DATA
+    // Log detailed error for debugging
+    if (error instanceof Error) {
+      console.error('[Analytics] Error details:', {
+        message: error.message,
+        stack: error.stack,
+        name: error.name,
+      })
+    }
+    // Return empty data instead of fallback to indicate error
+    return {
+      hasData: false,
+      overview: {
+        totalReceipts: 0,
+        totalRevenue: 0,
+        averageBasket: 0,
+        activeCustomers: 0,
+        identificationRate: 0,
+        digitalRate: 0,
+      },
+      trends: [],
+      stores: [],
+      categories: [],
+      identification: {
+        identifiedRevenueShare: 0,
+        identifiedAverageBasket: 0,
+        unidentifiedAverageBasket: 0,
+        identifiedFrequency: 0,
+      },
+      environment: {
+        digitalTicketsYear: 0,
+        paperSavedKg: 0,
+        co2SavedKg: 0,
+        treesEquivalent: 0,
+      },
+    }
   }
 }
 

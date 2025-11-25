@@ -1,4 +1,5 @@
-import { prisma } from '@/lib/prisma'
+import { retryWithFreshClient } from '@/lib/prisma'
+import { PrismaClient } from '@prisma/client'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import {
   Table,
@@ -18,7 +19,8 @@ export const dynamic = 'force-dynamic'
 
 async function getStore(id: string) {
   try {
-  const store = await prisma.store.findUnique({
+  const store = await retryWithFreshClient(async (prisma: PrismaClient) => {
+    return await prisma.store.findUnique({
     where: { id },
     include: {
       pos: {
@@ -40,6 +42,7 @@ async function getStore(id: string) {
       },
     },
   })
+  })
 
   if (!store) return null
 
@@ -53,7 +56,8 @@ async function getStore(id: string) {
       include: { lineItems: true }
     }>>> = []
     try {
-      allReceipts = await prisma.receipt.findMany({
+      allReceipts = await retryWithFreshClient(async (prisma: PrismaClient) => {
+        return await prisma.receipt.findMany({
     where: {
       storeId: store.id,
       createdAt: {
@@ -64,6 +68,7 @@ async function getStore(id: string) {
       lineItems: true,
     },
   })
+      })
     } catch (error) {
       console.error('Error fetching receipts for category analysis:', error)
     }

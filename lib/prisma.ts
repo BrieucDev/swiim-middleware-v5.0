@@ -202,35 +202,42 @@ if (!rawDatabaseUrl) {
 
 // Function to create a fresh Prisma Client instance
 // This is useful in serverless environments where prepared statements can conflict
+// 
+// IMPORTANT: For best results in serverless (Vercel), use Supabase Connection Pooler:
+// - Go to Supabase Dashboard → Settings → Database → Connection Pooling
+// - Use the Session mode connection string (port 6543)
+// - Format: postgresql://postgres.[ref]:[password]@aws-0-[region].pooler.supabase.com:6543/postgres
 export function getFreshPrismaClient(): PrismaClient {
-  if (!normalizedDatabaseUrl) {
-    const rawUrl = process.env.DATABASE_URL
-    if (!rawUrl) {
-      throw new Error('DATABASE_URL is not configured.')
-    }
-    try {
-      const normalized = normalizeDatabaseUrl(rawUrl)
-      return new PrismaClient({
-        log: process.env.NODE_ENV === 'development' ? ['query', 'error', 'warn'] : ['error'],
-        datasourceUrl: normalized,
-      })
-    } catch (error) {
-      throw new Error(`Failed to create Prisma Client: ${error instanceof Error ? error.message : 'Unknown error'}`)
-    }
+  const baseUrl = normalizedDatabaseUrl || process.env.DATABASE_URL
+  
+  if (!baseUrl) {
+    throw new Error('DATABASE_URL is not configured.')
   }
 
-  return new PrismaClient({
-    log: process.env.NODE_ENV === 'development' ? ['query', 'error', 'warn'] : ['error'],
-    datasourceUrl: normalizedDatabaseUrl,
-  })
+  try {
+    // Normalize if needed
+    let url = normalizedDatabaseUrl
+    if (!url) {
+      url = normalizeDatabaseUrl(baseUrl)
+    }
+
+    // Create a fresh instance - each call creates a new Prisma Client
+    // This helps avoid prepared statement conflicts in serverless environments
+    return new PrismaClient({
+      log: process.env.NODE_ENV === 'development' ? ['query', 'error', 'warn'] : ['error'],
+      datasourceUrl: url,
+    })
+  } catch (error) {
+    throw new Error(`Failed to create Prisma Client: ${error instanceof Error ? error.message : 'Unknown error'}`)
+  }
 }
 
 // Helper function to retry queries with fresh client instances
 // This handles prepared statement conflicts in serverless environments
 export async function retryWithFreshClient<T>(
   queryFn: (client: PrismaClient) => Promise<T>,
-  maxRetries: number = 3,
-  delay: number = 200
+  maxRetries: number = 5,
+  delay: number = 500
 ): Promise<T> {
   for (let attempt = 0; attempt < maxRetries; attempt++) {
     const client = getFreshPrismaClient()
@@ -246,10 +253,12 @@ export async function retryWithFreshClient<T>(
         (errorMessage.includes('already exists') || /s\d+/.test(errorMessage))
 
       if (isPreparedStatementError && attempt < maxRetries - 1) {
+        // Exponential backoff with jitter
+        const backoffDelay = delay * Math.pow(2, attempt) + Math.random() * 100
         console.log(
-          `[Prisma Retry] Prepared statement error, attempt ${attempt + 1}/${maxRetries}, waiting ${delay * (attempt + 1)}ms...`
+          `[Prisma Retry] Prepared statement error, attempt ${attempt + 1}/${maxRetries}, waiting ${Math.round(backoffDelay)}ms...`
         )
-        await new Promise((resolve) => setTimeout(resolve, delay * (attempt + 1)))
+        await new Promise((resolve) => setTimeout(resolve, backoffDelay))
         continue
       }
       throw error

@@ -1,5 +1,3 @@
-'use client'
-
 import { KpiCard } from '@/components/dashboard/kpi-card'
 import { ChartCard } from '@/components/dashboard/chart-card'
 import { ExportButton } from '@/components/export-button'
@@ -13,93 +11,11 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { formatCurrency } from '@/lib/format'
-import { useRouter } from 'next/navigation'
-import { Database } from 'lucide-react'
+import { getAnalyticsOverview } from '@/lib/analytics/overview'
+import Link from 'next/link'
+import { ArrowLeft } from 'lucide-react'
 
-// Données de démonstration complètes
-const DEMO_DATA = {
-  overview: {
-    totalReceipts: 12450,
-    totalRevenue: 452300,
-    averageBasket: 36.3,
-    activeCustomers: 2140,
-    identificationRate: 72.5,
-    digitalRate: 68.0,
-  },
-  trends: Array.from({ length: 30 }).map((_, index) => {
-    const base = 320 + Math.sin(index / 4) * 35 + Math.random() * 20
-    const revenue = base * (30 + (index % 5))
-    const date = new Date()
-    date.setDate(date.getDate() - (29 - index))
-    return {
-      date: date.toISOString().split('T')[0],
-      tickets: Math.round(base),
-      revenue: Math.round(revenue),
-    }
-  }),
-  stores: [
-    {
-      id: '1',
-      name: 'Paris Bastille',
-      tickets: 2800,
-      revenue: 145000,
-      averageBasket: 51.7,
-      identificationRate: 78.4,
-    },
-    {
-      id: '2',
-      name: 'Lyon Part-Dieu',
-      tickets: 2100,
-      revenue: 112500,
-      averageBasket: 53.5,
-      identificationRate: 70.1,
-    },
-    {
-      id: '3',
-      name: 'Bordeaux Centre',
-      tickets: 1300,
-      revenue: 68500,
-      averageBasket: 52.7,
-      identificationRate: 74.2,
-    },
-    {
-      id: '4',
-      name: 'Marseille Vieux-Port',
-      tickets: 1950,
-      revenue: 98500,
-      averageBasket: 50.5,
-      identificationRate: 69.8,
-    },
-    {
-      id: '5',
-      name: 'Toulouse Capitole',
-      tickets: 1650,
-      revenue: 78200,
-      averageBasket: 47.4,
-      identificationRate: 71.3,
-    },
-  ],
-  categories: [
-    { name: 'Épicerie', revenue: 125000, tickets: 5200, averageBasket: 24.0 },
-    { name: 'Frais', revenue: 89000, tickets: 4100, averageBasket: 21.7 },
-    { name: 'Hi-Tech', revenue: 72000, tickets: 620, averageBasket: 116.1 },
-    { name: 'Textile', revenue: 68000, tickets: 1850, averageBasket: 36.8 },
-    { name: 'Cosmétiques', revenue: 45000, tickets: 2100, averageBasket: 21.4 },
-    { name: 'Maison & Déco', revenue: 53300, tickets: 1580, averageBasket: 33.7 },
-  ],
-  identification: {
-    identifiedRevenueShare: 68,
-    identifiedAverageBasket: 44,
-    unidentifiedAverageBasket: 28,
-    identifiedFrequency: 2.8,
-  },
-  environment: {
-    digitalTicketsYear: 16200,
-    paperSavedKg: 48.5,
-    co2SavedKg: 38.4,
-    treesEquivalent: 4.8,
-  },
-}
+export const dynamic = 'force-dynamic'
 
 function toChartLabel(isoDate: string): string {
   try {
@@ -115,21 +31,59 @@ function toChartLabel(isoDate: string): string {
   }
 }
 
-export default function AnalytiquePage() {
-  const router = useRouter()
-  const data = DEMO_DATA
+// Safe data structure with defaults
+function getSafeData(data: any) {
+  return {
+    hasData: Boolean(data?.hasData),
+    overview: {
+      totalReceipts: Number(data?.overview?.totalReceipts) || 0,
+      totalRevenue: Number(data?.overview?.totalRevenue) || 0,
+      averageBasket: Number(data?.overview?.averageBasket) || 0,
+      activeCustomers: Number(data?.overview?.activeCustomers) || 0,
+      identificationRate: Number(data?.overview?.identificationRate) || 0,
+      digitalRate: Number(data?.overview?.digitalRate) || 0,
+    },
+    trends: Array.isArray(data?.trends) ? data.trends : [],
+    stores: Array.isArray(data?.stores) ? data.stores : [],
+    categories: Array.isArray(data?.categories) ? data.categories : [],
+    identification: {
+      identifiedRevenueShare: Number(data?.identification?.identifiedRevenueShare) || 0,
+      identifiedAverageBasket: Number(data?.identification?.identifiedAverageBasket) || 0,
+      unidentifiedAverageBasket: Number(data?.identification?.unidentifiedAverageBasket) || 0,
+      identifiedFrequency: Number(data?.identification?.identifiedFrequency) || 0,
+    },
+    environment: {
+      digitalTicketsYear: Number(data?.environment?.digitalTicketsYear) || 0,
+      paperSavedKg: Number(data?.environment?.paperSavedKg) || 0,
+      co2SavedKg: Number(data?.environment?.co2SavedKg) || 0,
+      treesEquivalent: Number(data?.environment?.treesEquivalent) || 0,
+    },
+  }
+}
 
-  const ticketsChartData = data.trends.map((point) => ({
-    date: toChartLabel(point.date),
-    count: point.tickets,
-    revenue: point.revenue,
+export default async function RealAnalytiquePage() {
+  let rawData: any = null
+  
+  try {
+    rawData = await getAnalyticsOverview()
+  } catch (error) {
+    console.error('[Analytics Page] Error fetching analytics:', error)
+    rawData = null
+  }
+
+  const data = getSafeData(rawData)
+
+  const ticketsChartData = data.trends.map((point: any) => ({
+    date: toChartLabel(point?.date || ''),
+    count: Number(point?.tickets) || 0,
+    revenue: Number(point?.revenue) || 0,
   }))
 
   const revenueChartData = ticketsChartData
 
-  const storeChartData = data.stores.map((store) => ({
-    name: store.name,
-    value: store.revenue,
+  const storeChartData = data.stores.map((store: any) => ({
+    name: String(store?.name || 'Magasin inconnu'),
+    value: Number(store?.revenue) || 0,
   }))
 
   const loyaltyShare = data.identification.identifiedRevenueShare
@@ -139,26 +93,40 @@ export default function AnalytiquePage() {
       <div className="flex items-center justify-between">
         <div className="space-y-1">
           <div className="flex items-center gap-3">
-            <h1 className="text-2xl md:text-3xl font-semibold text-gray-900">Analytique</h1>
-            <Badge variant="outline" className="border-blue-300 text-blue-700 bg-blue-50">
-              Mode démonstration
-            </Badge>
+            <h1 className="text-2xl md:text-3xl font-semibold text-gray-900">Analytique - Données réelles</h1>
+            {!data.hasData && (
+              <Badge variant="outline" className="border-yellow-300 text-yellow-700 bg-yellow-50">
+                Aucune donnée
+              </Badge>
+            )}
           </div>
           <p className="text-sm text-gray-500">
             Vue d'ensemble des tickets numériques, de l'identification clients et de l'impact environnemental
           </p>
         </div>
         <div className="flex items-center gap-3">
-          <Button
-            onClick={() => router.push('/analytique/real')}
-            className="bg-gray-900 text-white hover:bg-gray-800"
-          >
-            <Database className="mr-2 h-4 w-4" />
-            Voir les vraies données
-          </Button>
+          <Link href="/analytique">
+            <Button variant="outline" size="sm">
+              <ArrowLeft className="mr-2 h-4 w-4" />
+              Retour à la démo
+            </Button>
+          </Link>
           <ExportButton />
         </div>
       </div>
+
+      {!data.hasData && data.stores.length === 0 && data.trends.length === 0 && (
+        <Card className="bg-yellow-50 border-yellow-200 rounded-2xl shadow-sm">
+          <CardContent className="px-6 py-8">
+            <div className="text-center">
+              <p className="text-lg font-semibold text-yellow-900 mb-2">Aucune donnée disponible</p>
+              <p className="text-sm text-yellow-700 mb-4">
+                Les analytiques nécessitent des tickets dans la base de données. Créez des magasins et générez des tickets de démonstration pour voir les statistiques.
+              </p>
+            </div>
+          </CardContent>
+        </Card>
+      )}
       
       <section className="space-y-4">
         <div>
@@ -179,10 +147,18 @@ export default function AnalytiquePage() {
         <h2 className="text-lg font-semibold text-gray-900">Tendances</h2>
         <div className="grid gap-6 md:grid-cols-2">
           <ChartCard title="Tickets par jour" description="Évolution quotidienne des tickets émis">
-            <TicketsChart data={ticketsChartData} />
+            {ticketsChartData.length > 0 ? (
+              <TicketsChart data={ticketsChartData} />
+            ) : (
+              <p className="text-sm text-gray-500 text-center py-8">Aucune donnée disponible</p>
+            )}
           </ChartCard>
           <ChartCard title="Chiffre d'affaires par jour" description="CA journalier sur 30 jours">
-            <RevenueChart data={revenueChartData} />
+            {revenueChartData.length > 0 ? (
+              <RevenueChart data={revenueChartData} />
+            ) : (
+              <p className="text-sm text-gray-500 text-center py-8">Aucune donnée disponible</p>
+            )}
           </ChartCard>
         </div>
       </section>
@@ -191,13 +167,17 @@ export default function AnalytiquePage() {
         <h2 className="text-lg font-semibold text-gray-900">Performance par magasin</h2>
         <div className="grid gap-6 lg:grid-cols-2">
           <ChartCard title="CA par magasin">
-            <BarChart
-              data={storeChartData}
-              dataKey="value"
-              nameKey="name"
-              formatValue={(v) => formatCurrency(Number(v))}
-              height={320}
-            />
+            {storeChartData.length > 0 ? (
+              <BarChart
+                data={storeChartData}
+                dataKey="value"
+                nameKey="name"
+                formatValue={(v) => formatCurrency(Number(v))}
+                height={320}
+              />
+            ) : (
+              <p className="text-sm text-gray-500 text-center py-8">Aucune donnée disponible</p>
+            )}
           </ChartCard>
           <Card className="bg-white/90 border border-gray-100 rounded-2xl shadow-sm">
             <CardHeader className="px-6 pt-6 pb-4">
@@ -216,19 +196,27 @@ export default function AnalytiquePage() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {data.stores.map((store) => (
-                      <TableRow key={store.id}>
-                        <TableCell className="font-medium text-gray-900">{store.name}</TableCell>
-                        <TableCell className="text-right text-gray-600">{store.tickets}</TableCell>
-                        <TableCell className="text-right font-semibold">{formatCurrency(store.revenue)}</TableCell>
-                        <TableCell className="text-right text-gray-600">
-                          {formatCurrency(store.averageBasket)}
-                        </TableCell>
-                        <TableCell className="text-right text-gray-600">
-                          {store.identificationRate.toFixed(1)}%
+                    {data.stores.length > 0 ? (
+                      data.stores.map((store: any) => (
+                        <TableRow key={store?.id || Math.random()}>
+                          <TableCell className="font-medium text-gray-900">{String(store?.name || 'Magasin inconnu')}</TableCell>
+                          <TableCell className="text-right text-gray-600">{Number(store?.tickets) || 0}</TableCell>
+                          <TableCell className="text-right font-semibold">{formatCurrency(Number(store?.revenue) || 0)}</TableCell>
+                          <TableCell className="text-right text-gray-600">
+                            {formatCurrency(Number(store?.averageBasket) || 0)}
+                          </TableCell>
+                          <TableCell className="text-right text-gray-600">
+                            {(Number(store?.identificationRate) || 0).toFixed(1)}%
+                          </TableCell>
+                        </TableRow>
+                      ))
+                    ) : (
+                      <TableRow>
+                        <TableCell colSpan={5} className="text-center text-gray-500 py-6">
+                          Aucun ticket enregistré sur la période.
                         </TableCell>
                       </TableRow>
-                    ))}
+                    )}
                   </TableBody>
                 </Table>
               </div>
@@ -240,14 +228,18 @@ export default function AnalytiquePage() {
       <section className="space-y-4">
         <h2 className="text-lg font-semibold text-gray-900">Analyse par catégorie</h2>
         <ChartCard title="Répartition du CA (jusqu'à 6 catégories)">
-          <StackedBarChart
-            data={data.categories.map((category) => ({
-              name: category.name,
-              fidelises: category.revenue * (loyaltyShare / 100),
-              nonFidelises: category.revenue * (1 - loyaltyShare / 100),
-            }))}
-            height={320}
-          />
+          {data.categories.length > 0 ? (
+            <StackedBarChart
+              data={data.categories.map((category: any) => ({
+                name: String(category?.name || 'Divers'),
+                fidelises: (Number(category?.revenue) || 0) * (loyaltyShare / 100),
+                nonFidelises: (Number(category?.revenue) || 0) * (1 - loyaltyShare / 100),
+              }))}
+              height={320}
+            />
+          ) : (
+            <p className="text-sm text-gray-500 text-center py-8">Aucune catégorie détectée sur les tickets récents.</p>
+          )}
         </ChartCard>
         <Card className="bg-white/90 border border-gray-100 rounded-2xl shadow-sm">
           <CardContent className="px-6 pb-6 pt-4">
@@ -262,18 +254,26 @@ export default function AnalytiquePage() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {data.categories.map((category) => (
-                    <TableRow key={category.name}>
-                      <TableCell className="font-medium text-gray-900">{category.name}</TableCell>
-                      <TableCell className="text-right font-semibold">
-                        {formatCurrency(category.revenue)}
-                      </TableCell>
-                      <TableCell className="text-right text-gray-600">{category.tickets}</TableCell>
-                      <TableCell className="text-right text-gray-600">
-                        {formatCurrency(category.averageBasket)}
+                  {data.categories.length > 0 ? (
+                    data.categories.map((category: any) => (
+                      <TableRow key={String(category?.name || 'Divers')}>
+                        <TableCell className="font-medium text-gray-900">{String(category?.name || 'Divers')}</TableCell>
+                        <TableCell className="text-right font-semibold">
+                          {formatCurrency(Number(category?.revenue) || 0)}
+                        </TableCell>
+                        <TableCell className="text-right text-gray-600">{Number(category?.tickets) || 0}</TableCell>
+                        <TableCell className="text-right text-gray-600">
+                          {formatCurrency(Number(category?.averageBasket) || 0)}
+                        </TableCell>
+                      </TableRow>
+                    ))
+                  ) : (
+                    <TableRow>
+                      <TableCell colSpan={4} className="text-center text-gray-500 py-6">
+                        Ajoutez des tickets avec des catégories pour activer cette vue.
                       </TableCell>
                     </TableRow>
-                  ))}
+                  )}
                 </TableBody>
               </Table>
             </div>
@@ -334,7 +334,7 @@ export default function AnalytiquePage() {
               <PieChart
                 data={[
                   { name: 'Identifiés', value: data.identification.identifiedRevenueShare },
-                  { name: 'Non identifiés', value: 100 - data.identification.identifiedRevenueShare },
+                  { name: 'Non identifiés', value: Math.max(0, 100 - data.identification.identifiedRevenueShare) },
                 ]}
                 formatValue={(value) => `${Number(value).toFixed(1)}%`}
                 height={240}
@@ -376,3 +376,4 @@ function EnvironmentStat({ label, value }: { label: string; value: string | numb
     </div>
   )
 }
+

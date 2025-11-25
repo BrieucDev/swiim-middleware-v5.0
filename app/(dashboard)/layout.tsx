@@ -1,6 +1,6 @@
 import { Sidebar } from '@/components/layout/Sidebar'
 import { Header } from '@/components/layout/Header'
-import { prisma } from '@/lib/prisma'
+import { loadPrisma } from '@/lib/analytics/utils'
 
 export const dynamic = 'force-dynamic'
 
@@ -10,15 +10,17 @@ export default async function DashboardLayout({
   children: React.ReactNode
 }) {
   let stores: Array<{ id: string; name: string }> = []
-  
+
   try {
-    stores = await prisma.store.findMany({
-      select: { id: true, name: true },
-      orderBy: { name: 'asc' },
-    })
+    const prisma = await loadPrisma()
+    if (prisma) {
+      stores = await prisma.store.findMany({
+        select: { id: true, name: true },
+        orderBy: { name: 'asc' },
+      })
+    }
   } catch (error) {
     console.error('Error fetching stores:', error)
-    // Continue with empty stores array to prevent layout crash
   }
 
   return (

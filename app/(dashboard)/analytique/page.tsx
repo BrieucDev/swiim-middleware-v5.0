@@ -9,12 +9,18 @@ import { BarChart } from '@/components/dashboard/bar-chart'
 import { PieChart } from '@/components/dashboard/pie-chart'
 import { StackedBarChart } from '@/components/dashboard/stacked-bar-chart'
 import { formatCurrency } from '@/lib/format'
-import { getBusinessOverview, getUnlockedData, getTimeSeriesData } from '@/lib/analytics/business'
-import { getClientSegments } from '@/lib/analytics/segments'
-import { getCategoryAnalytics } from '@/lib/analytics/categories'
-import { getStorePerformance } from '@/lib/analytics/stores'
-import { getCohortData } from '@/lib/analytics/cohorts'
-import { getEnvironmentalImpact } from '@/lib/analytics/environment'
+import {
+  getBusinessOverviewDemo,
+  getUnlockedDataDemo,
+  getTimeSeriesDataDemo,
+  getClientSegmentsDemo,
+  getCategoryAnalyticsDemo,
+  getStorePerformanceDemo,
+  getCohortDataDemo,
+  getEnvironmentalImpactDemo,
+  getOperationalQualityDemo,
+  getPaymentMethodsDemo,
+} from '@/lib/analytics/static-data'
 import {
   ShoppingBag,
   CreditCard,
@@ -35,14 +41,16 @@ export const dynamic = 'force-dynamic'
 
 export default async function AnalytiquePage() {
   // Fetch all analytics data
-  const businessOverview = await getBusinessOverview()
-  const unlockedData = getUnlockedData()
-  const segments = await getClientSegments()
-  const categoryAnalytics = await getCategoryAnalytics()
-  const storePerformance = await getStorePerformance()
-  const timeSeriesData = await getTimeSeriesData()
-  const cohortData = getCohortData()
-  const environmentalImpact = getEnvironmentalImpact()
+  const businessOverview = await getBusinessOverviewDemo()
+  const unlockedData = await getUnlockedDataDemo()
+  const segments = await getClientSegmentsDemo()
+  const categoryAnalytics = await getCategoryAnalyticsDemo()
+  const storePerformance = await getStorePerformanceDemo()
+  const timeSeriesData = await getTimeSeriesDataDemo()
+  const cohortData = await getCohortDataDemo()
+  const environmentalImpact = await getEnvironmentalImpactDemo()
+  const operationalQuality = await getOperationalQualityDemo()
+  const paymentMethods = await getPaymentMethodsDemo()
 
   // Prepare chart data
   const categoryRevenueChart = categoryAnalytics.map((cat) => ({
@@ -73,26 +81,6 @@ export default async function AnalytiquePage() {
       name: item.category,
       value: item.rate,
     }))
-
-  // Payment methods demo data
-  const paymentMethods = [
-    { name: 'Carte bancaire', value: 45230 },
-    { name: 'Espèces', value: 12540 },
-    { name: 'Mobile', value: 8540 },
-    { name: 'Chèque', value: 1200 },
-  ]
-
-  // Operational quality demo data
-  const operationalQuality = {
-    digitalTicketsByStore: storePerformance.map((store) => ({
-      storeName: store.name,
-      rate: store.digitalTicketsRate,
-    })),
-    validEmailRate: 72.5,
-    validPhoneRate: 68.2,
-    cancelledRate: 2.1,
-    errorRate: 0.8,
-  }
 
   // Find best and worst performing stores
   const bestStore = storePerformance[0]

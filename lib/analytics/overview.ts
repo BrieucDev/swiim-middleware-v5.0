@@ -59,79 +59,10 @@ export type AnalyticsOverview = {
   environment: EnvironmentImpact
 }
 
-const FALLBACK_DATA: AnalyticsOverview = {
-  hasData: false,
-  overview: {
-    totalReceipts: 12450,
-    totalRevenue: 452300,
-    averageBasket: 36.3,
-    activeCustomers: 2140,
-    identificationRate: 72.5,
-    digitalRate: 68.0,
-    trends: {
-      receiptsTrend: 5.2,
-      revenueTrend: 7.8,
-      identificationTrend: 2.1,
-    },
-  },
-  trends: Array.from({ length: 30 }).map((_, index) => {
-    const base = 320 + Math.sin(index / 4) * 35
-    const revenue = base * (30 + (index % 5))
-    return {
-      date: new Date(Date.now() - (29 - index) * 24 * 60 * 60 * 1000)
-        .toISOString()
-        .split('T')[0],
-      tickets: Math.round(base),
-      revenue: Math.round(revenue),
-    }
-  }),
-  stores: [
-    {
-      id: '1',
-      name: 'Paris Bastille',
-      tickets: 2800,
-      revenue: 145000,
-      averageBasket: 51.7,
-      identificationRate: 78.4,
-    },
-    {
-      id: '2',
-      name: 'Lyon Part-Dieu',
-      tickets: 2100,
-      revenue: 112500,
-      averageBasket: 53.5,
-      identificationRate: 70.1,
-    },
-    {
-      id: '3',
-      name: 'Bordeaux Centre',
-      tickets: 1300,
-      revenue: 68500,
-      averageBasket: 52.7,
-      identificationRate: 74.2,
-    },
-  ],
-  categories: [
-    { name: 'Épicerie', revenue: 125000, tickets: 5200, averageBasket: 24.0 },
-    { name: 'Frais', revenue: 89000, tickets: 4100, averageBasket: 21.7 },
-    { name: 'Hi-Tech', revenue: 72000, tickets: 620, averageBasket: 116.1 },
-  ],
-  identification: {
-    identifiedRevenueShare: 68,
-    identifiedAverageBasket: 44,
-    unidentifiedAverageBasket: 28,
-    identifiedFrequency: 2.8,
-  },
-  environment: {
-    digitalTicketsYear: 16200,
-    paperSavedKg: 48.5,
-    co2SavedKg: 38.4,
-    treesEquivalent: 4.8,
-  },
-}
-
 export async function getAnalyticsOverview(): Promise<AnalyticsOverview> {
   try {
+    console.log('[Analytics] Starting data fetch...')
+    
     const now = new Date()
     const startDate = new Date(now)
     startDate.setDate(startDate.getDate() - 30)
@@ -142,21 +73,54 @@ export async function getAnalyticsOverview(): Promise<AnalyticsOverview> {
     const yearStart = new Date(now)
     yearStart.setFullYear(yearStart.getFullYear() - 1)
 
+    console.log('[Analytics] Date ranges:', {
+      startDate: startDate.toISOString(),
+      previousStart: previousStart.toISOString(),
+      yearStart: yearStart.toISOString(),
+    })
+
     // Use retryWithFreshClient to avoid prepared statement errors
-    const [recentReceipts, previousReceipts, yearReceipts] = await Promise.all([
-      retryWithFreshClient(async (prisma: PrismaClient) => {
-        return await prisma.receipt.findMany({
+    let recentReceipts: any[] = []
+    let previousReceipts: any[] = []
+    let yearReceipts: any[] = []
+
+    try {
+      console.log('[Analytics] Fetching recent receipts...')
+      recentReceipts = await retryWithFreshClient(async (prisma: PrismaClient) => {
+        const receipts = await prisma.receipt.findMany({
           where: {
             createdAt: { gte: startDate },
           },
           include: {
-            store: true,
-            lineItems: true,
+            store: {
+              select: {
+                id: true,
+                name: true,
+              },
+            },
+            lineItems: {
+              select: {
+                id: true,
+                category: true,
+                productName: true,
+                quantity: true,
+                unitPrice: true,
+              },
+            },
           },
         })
-      }),
-      retryWithFreshClient(async (prisma: PrismaClient) => {
-        return await prisma.receipt.findMany({
+        console.log('[Analytics] Recent receipts fetched:', receipts.length)
+        return receipts
+      })
+    } catch (error) {
+      console.error('[Analytics] Error fetching recent receipts:', error)
+      throw error
+    }
+
+    try {
+      console.log('[Analytics] Fetching previous receipts...')
+      previousReceipts = await retryWithFreshClient(async (prisma: PrismaClient) => {
+        const receipts = await prisma.receipt.findMany({
           where: {
             createdAt: {
               gte: previousStart,
@@ -169,9 +133,19 @@ export async function getAnalyticsOverview(): Promise<AnalyticsOverview> {
             status: true,
           },
         })
-      }),
-      retryWithFreshClient(async (prisma: PrismaClient) => {
-        return await prisma.receipt.findMany({
+        console.log('[Analytics] Previous receipts fetched:', receipts.length)
+        return receipts
+      })
+    } catch (error) {
+      console.error('[Analytics] Error fetching previous receipts:', error)
+      // Continue with empty array if this fails
+      previousReceipts = []
+    }
+
+    try {
+      console.log('[Analytics] Fetching year receipts...')
+      yearReceipts = await retryWithFreshClient(async (prisma: PrismaClient) => {
+        const receipts = await prisma.receipt.findMany({
           where: {
             createdAt: { gte: yearStart },
           },
@@ -179,11 +153,18 @@ export async function getAnalyticsOverview(): Promise<AnalyticsOverview> {
             status: true,
           },
         })
-      }),
-    ])
+        console.log('[Analytics] Year receipts fetched:', receipts.length)
+        return receipts
+      })
+    } catch (error) {
+      console.error('[Analytics] Error fetching year receipts:', error)
+      // Continue with empty array if this fails
+      yearReceipts = []
+    }
 
     // If no receipts found, return empty data (not fallback)
-    if (recentReceipts.length === 0) {
+    if (!recentReceipts || recentReceipts.length === 0) {
+      console.log('[Analytics] No recent receipts found, returning empty data')
       return {
         hasData: false,
         overview: {
@@ -212,42 +193,80 @@ export async function getAnalyticsOverview(): Promise<AnalyticsOverview> {
       }
     }
 
+    console.log('[Analytics] Processing receipts data...')
+
+    // Safely calculate totals
     const totalRevenue = recentReceipts.reduce(
-      (sum, receipt) => sum + Number(receipt.totalAmount),
+      (sum, receipt) => {
+        const amount = receipt?.totalAmount ? Number(receipt.totalAmount) : 0
+        return sum + (isNaN(amount) ? 0 : amount)
+      },
       0
     )
     const totalReceipts = recentReceipts.length
-    const activeCustomers = new Set(
-      recentReceipts.filter((r) => r.customerId).map((r) => r.customerId as string)
-    ).size
-    const identifiedReceipts = recentReceipts.filter((r) => r.customerId).length
-    const digitalReceipts = recentReceipts.filter((r) => r.status === 'RECLAME').length
+    
+    // Get unique customers safely
+    const customerIds = recentReceipts
+      .filter((r) => r?.customerId)
+      .map((r) => r.customerId)
+      .filter((id): id is string => typeof id === 'string' && id.length > 0)
+    
+    const activeCustomers = new Set(customerIds).size
+    const identifiedReceipts = customerIds.length
+    const digitalReceipts = recentReceipts.filter((r) => r?.status === 'RECLAME').length
 
-    const prevRevenue = previousReceipts.reduce(
-      (sum, receipt) => sum + Number(receipt.totalAmount),
+    console.log('[Analytics] Calculated metrics:', {
+      totalReceipts,
+      totalRevenue,
+      activeCustomers,
+      identifiedReceipts,
+      digitalReceipts,
+    })
+
+    // Calculate previous period metrics safely
+    const prevRevenue = (previousReceipts || []).reduce(
+      (sum, receipt) => {
+        const amount = receipt?.totalAmount ? Number(receipt.totalAmount) : 0
+        return sum + (isNaN(amount) ? 0 : amount)
+      },
       0
     )
-    const prevReceiptsCount = previousReceipts.length
-    const prevIdentified = previousReceipts.filter((r) => r.customerId).length
+    const prevReceiptsCount = previousReceipts?.length || 0
+    const prevIdentified = (previousReceipts || []).filter((r) => r?.customerId).length
 
+    // Build daily trends
     const dailyMap = new Map<string, { tickets: number; revenue: number }>()
     recentReceipts.forEach((receipt) => {
-      const key = receipt.createdAt.toISOString().split('T')[0]
-      const current = dailyMap.get(key) || { tickets: 0, revenue: 0 }
-      dailyMap.set(key, {
-        tickets: current.tickets + 1,
-        revenue: current.revenue + Number(receipt.totalAmount),
-      })
+      if (!receipt?.createdAt) return
+      
+      try {
+        const date = new Date(receipt.createdAt)
+        if (isNaN(date.getTime())) return
+        
+        const key = date.toISOString().split('T')[0]
+        const current = dailyMap.get(key) || { tickets: 0, revenue: 0 }
+        const amount = receipt?.totalAmount ? Number(receipt.totalAmount) : 0
+        
+        dailyMap.set(key, {
+          tickets: current.tickets + 1,
+          revenue: current.revenue + (isNaN(amount) ? 0 : amount),
+        })
+      } catch (error) {
+        console.error('[Analytics] Error processing receipt date:', error)
+      }
     })
 
     const trends = Array.from(dailyMap.entries())
       .map(([date, value]) => ({
         date,
-        tickets: value.tickets,
-        revenue: value.revenue,
+        tickets: value.tickets || 0,
+        revenue: value.revenue || 0,
       }))
       .sort((a, b) => a.date.localeCompare(b.date))
 
+    console.log('[Analytics] Trends calculated:', trends.length, 'days')
+
+    // Build store performance
     const storeMap = new Map<
       string,
       {
@@ -259,19 +278,25 @@ export async function getAnalyticsOverview(): Promise<AnalyticsOverview> {
     >()
 
     recentReceipts.forEach((receipt) => {
+      if (!receipt?.storeId) return
+      
       const storeId = receipt.storeId
+      const storeName = receipt?.store?.name || 'Magasin inconnu'
+      const amount = receipt?.totalAmount ? Number(receipt.totalAmount) : 0
+      
       if (!storeMap.has(storeId)) {
         storeMap.set(storeId, {
-          name: receipt.store?.name || 'Magasin inconnu',
+          name: storeName,
           revenue: 0,
           tickets: 0,
           identified: 0,
         })
       }
+      
       const entry = storeMap.get(storeId)!
-      entry.revenue += Number(receipt.totalAmount)
+      entry.revenue += isNaN(amount) ? 0 : amount
       entry.tickets += 1
-      if (receipt.customerId) {
+      if (receipt?.customerId) {
         entry.identified += 1
       }
     })
@@ -279,14 +304,17 @@ export async function getAnalyticsOverview(): Promise<AnalyticsOverview> {
     const stores: StorePerformance[] = Array.from(storeMap.entries()).map(
       ([id, value]) => ({
         id,
-        name: value.name,
-        revenue: value.revenue,
-        tickets: value.tickets,
-        averageBasket: value.tickets > 0 ? value.revenue / value.tickets : 0,
-        identificationRate: value.tickets > 0 ? (value.identified / value.tickets) * 100 : 0,
+        name: value.name || 'Magasin inconnu',
+        revenue: value.revenue || 0,
+        tickets: value.tickets || 0,
+        averageBasket: value.tickets > 0 ? (value.revenue || 0) / value.tickets : 0,
+        identificationRate: value.tickets > 0 ? ((value.identified || 0) / value.tickets) * 100 : 0,
       })
     )
 
+    console.log('[Analytics] Stores calculated:', stores.length)
+
+    // Build category performance
     const categoryMap = new Map<
       string,
       {
@@ -296,32 +324,51 @@ export async function getAnalyticsOverview(): Promise<AnalyticsOverview> {
     >()
 
     recentReceipts.forEach((receipt) => {
-      receipt.lineItems.forEach((item) => {
-        const category = item.category || 'Divers'
+      if (!receipt?.lineItems || !Array.isArray(receipt.lineItems)) return
+      
+      receipt.lineItems.forEach((item: any) => {
+        if (!item) return
+        
+        const category = item?.category || 'Divers'
+        const quantity = item?.quantity ? Number(item.quantity) : 0
+        const unitPrice = item?.unitPrice ? Number(item.unitPrice) : 0
+        
         if (!categoryMap.has(category)) {
           categoryMap.set(category, {
             revenue: 0,
             receipts: new Set<string>(),
           })
         }
+        
         const entry = categoryMap.get(category)!
-        entry.revenue += Number(item.unitPrice) * item.quantity
-        entry.receipts.add(receipt.id)
+        const itemRevenue = (isNaN(quantity) ? 0 : quantity) * (isNaN(unitPrice) ? 0 : unitPrice)
+        entry.revenue += itemRevenue
+        
+        if (receipt?.id) {
+          entry.receipts.add(receipt.id)
+        }
       })
     })
 
     const categories: CategoryPerformance[] = Array.from(categoryMap.entries()).map(
       ([name, value]) => ({
-        name,
-        revenue: value.revenue,
-        tickets: value.receipts.size,
-        averageBasket: value.receipts.size > 0 ? value.revenue / value.receipts.size : 0,
+        name: name || 'Divers',
+        revenue: value.revenue || 0,
+        tickets: value.receipts.size || 0,
+        averageBasket: value.receipts.size > 0 ? (value.revenue || 0) / value.receipts.size : 0,
       })
     )
 
+    console.log('[Analytics] Categories calculated:', categories.length)
+
+    // Calculate identification metrics
     const identifiedRevenue = recentReceipts
-      .filter((r) => r.customerId)
-      .reduce((sum, receipt) => sum + Number(receipt.totalAmount), 0)
+      .filter((r) => r?.customerId)
+      .reduce((sum, receipt) => {
+        const amount = receipt?.totalAmount ? Number(receipt.totalAmount) : 0
+        return sum + (isNaN(amount) ? 0 : amount)
+      }, 0)
+    
     const unidentifiedRevenue = totalRevenue - identifiedRevenue
 
     const identifiedAverageBasket =
@@ -336,10 +383,13 @@ export async function getAnalyticsOverview(): Promise<AnalyticsOverview> {
         ? identifiedReceipts / activeCustomers
         : 0
 
-    const digitalYear = yearReceipts.filter((r) => r.status === 'RECLAME').length
+    // Calculate environment impact
+    const digitalYear = (yearReceipts || []).filter((r) => r?.status === 'RECLAME').length
     const paperSaved = digitalYear * 0.003 // 3g per ticket => kg
     const co2Saved = paperSaved * 0.8
     const trees = paperSaved * 0.1
+
+    console.log('[Analytics] All calculations complete, returning data')
 
     return {
       hasData: true,
@@ -389,6 +439,8 @@ export async function getAnalyticsOverview(): Promise<AnalyticsOverview> {
         stack: error.stack,
         name: error.name,
       })
+    } else {
+      console.error('[Analytics] Unknown error:', error)
     }
     // Return empty data instead of fallback to indicate error
     return {
@@ -419,4 +471,3 @@ export async function getAnalyticsOverview(): Promise<AnalyticsOverview> {
     }
   }
 }
-

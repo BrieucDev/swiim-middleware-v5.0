@@ -200,5 +200,63 @@ if (!rawDatabaseUrl) {
   }
 }
 
+// Function to create a fresh Prisma Client instance
+// This is useful in serverless environments where prepared statements can conflict
+export function getFreshPrismaClient(): PrismaClient {
+  if (!normalizedDatabaseUrl) {
+    const rawUrl = process.env.DATABASE_URL
+    if (!rawUrl) {
+      throw new Error('DATABASE_URL is not configured.')
+    }
+    try {
+      const normalized = normalizeDatabaseUrl(rawUrl)
+      return new PrismaClient({
+        log: process.env.NODE_ENV === 'development' ? ['query', 'error', 'warn'] : ['error'],
+        datasourceUrl: normalized,
+      })
+    } catch (error) {
+      throw new Error(`Failed to create Prisma Client: ${error instanceof Error ? error.message : 'Unknown error'}`)
+    }
+  }
+
+  return new PrismaClient({
+    log: process.env.NODE_ENV === 'development' ? ['query', 'error', 'warn'] : ['error'],
+    datasourceUrl: normalizedDatabaseUrl,
+  })
+}
+
+// Helper function to retry queries with fresh client instances
+// This handles prepared statement conflicts in serverless environments
+export async function retryWithFreshClient<T>(
+  queryFn: (client: PrismaClient) => Promise<T>,
+  maxRetries: number = 3,
+  delay: number = 200
+): Promise<T> {
+  for (let attempt = 0; attempt < maxRetries; attempt++) {
+    const client = getFreshPrismaClient()
+    try {
+      const result = await queryFn(client)
+      await client.$disconnect().catch(() => {})
+      return result
+    } catch (error: any) {
+      await client.$disconnect().catch(() => {})
+      const errorMessage = error?.message || String(error)
+      const isPreparedStatementError =
+        errorMessage.includes('prepared statement') &&
+        (errorMessage.includes('already exists') || /s\d+/.test(errorMessage))
+
+      if (isPreparedStatementError && attempt < maxRetries - 1) {
+        console.log(
+          `[Prisma Retry] Prepared statement error, attempt ${attempt + 1}/${maxRetries}, waiting ${delay * (attempt + 1)}ms...`
+        )
+        await new Promise((resolve) => setTimeout(resolve, delay * (attempt + 1)))
+        continue
+      }
+      throw error
+    }
+  }
+  throw new Error('Max retries exceeded')
+}
+
 export { prisma }
 

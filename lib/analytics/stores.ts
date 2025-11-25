@@ -1,4 +1,3 @@
-import { Decimal } from '@prisma/client/runtime/library'
 import { loadPrisma } from './utils'
 
 export interface StorePerformance {
@@ -69,9 +68,9 @@ export async function getStorePerformance(
     storeData.forEach((data, storeId) => {
       const tickets = data.receipts.length
       const revenue = data.receipts.reduce(
-        (sum, r) => sum.plus(r.totalAmount),
-        new Decimal(0)
-      ).toNumber()
+        (sum, r) => sum + Number(r.totalAmount),
+        0
+      )
       const avgBasket = tickets > 0 ? revenue / tickets : 0
       const identificationRate =
         tickets > 0 ? (data.identified / tickets) * 100 : 0

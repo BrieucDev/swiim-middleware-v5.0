@@ -1,4 +1,3 @@
-import { Decimal } from '@prisma/client/runtime/library'
 import { loadPrisma } from './utils'
 
 export interface ClientSegment {
@@ -44,7 +43,7 @@ export async function getClientSegments(
       string,
       {
         receipts: typeof receipts
-        totalSpend: Decimal
+        totalSpend: number
         categories: Set<string>
         firstVisit: Date
         lastVisit: Date
@@ -56,14 +55,14 @@ export async function getClientSegments(
 
       const existing = customerData.get(r.customerId) || {
         receipts: [],
-        totalSpend: new Decimal(0),
+        totalSpend: 0,
         categories: new Set<string>(),
         firstVisit: r.createdAt,
         lastVisit: r.createdAt,
       }
 
       existing.receipts.push(r)
-      existing.totalSpend = existing.totalSpend.plus(r.totalAmount)
+      existing.totalSpend += Number(r.totalAmount)
       r.lineItems.forEach((li) => existing.categories.add(li.category))
       if (r.createdAt < existing.firstVisit) existing.firstVisit = r.createdAt
       if (r.createdAt > existing.lastVisit) existing.lastVisit = r.createdAt
@@ -77,7 +76,7 @@ export async function getClientSegments(
 
     // Champions: high basket + high frequency
     const champions = customers.filter(([_, data]) => {
-      const avgBasket = data.totalSpend.div(data.receipts.length).toNumber()
+      const avgBasket = data.totalSpend / data.receipts.length
       const daysActive = Math.max(
         1,
         (data.lastVisit.getTime() - data.firstVisit.getTime()) /
@@ -89,9 +88,9 @@ export async function getClientSegments(
 
     if (champions.length > 0) {
       const totalRevenue = champions.reduce(
-        (sum, [_, data]) => sum.plus(data.totalSpend),
-        new Decimal(0)
-      ).toNumber()
+        (sum, [_, data]) => sum + data.totalSpend,
+        0
+      )
       const avgBasket =
         totalRevenue /
         champions.reduce((sum, [_, data]) => sum + data.receipts.length, 0)
@@ -118,7 +117,7 @@ export async function getClientSegments(
 
     // Fidèles: regular, medium basket
     const fideles = customers.filter(([_, data]) => {
-      const avgBasket = data.totalSpend.div(data.receipts.length).toNumber()
+      const avgBasket = data.totalSpend / data.receipts.length
       const daysActive = Math.max(
         1,
         (data.lastVisit.getTime() - data.firstVisit.getTime()) /
@@ -135,9 +134,9 @@ export async function getClientSegments(
 
     if (fideles.length > 0) {
       const totalRevenue = fideles.reduce(
-        (sum, [_, data]) => sum.plus(data.totalSpend),
-        new Decimal(0)
-      ).toNumber()
+        (sum, [_, data]) => sum + data.totalSpend,
+        0
+      )
       const avgBasket =
         totalRevenue /
         fideles.reduce((sum, [_, data]) => sum + data.receipts.length, 0)
@@ -175,9 +174,9 @@ export async function getClientSegments(
 
     if (occasionnels.length > 0) {
       const totalRevenue = occasionnels.reduce(
-        (sum, [_, data]) => sum.plus(data.totalSpend),
-        new Decimal(0)
-      ).toNumber()
+        (sum, [_, data]) => sum + data.totalSpend,
+        0
+      )
       const avgBasket =
         totalRevenue /
         occasionnels.reduce((sum, [_, data]) => sum + data.receipts.length, 0)
@@ -211,9 +210,9 @@ export async function getClientSegments(
 
     if (aRisque.length > 0) {
       const totalRevenue = aRisque.reduce(
-        (sum, [_, data]) => sum.plus(data.totalSpend),
-        new Decimal(0)
-      ).toNumber()
+        (sum, [_, data]) => sum + data.totalSpend,
+        0
+      )
       const avgBasket =
         totalRevenue /
         aRisque.reduce((sum, [_, data]) => sum + data.receipts.length, 0)
@@ -238,9 +237,9 @@ export async function getClientSegments(
 
     if (nouveaux.length > 0) {
       const totalRevenue = nouveaux.reduce(
-        (sum, [_, data]) => sum.plus(data.totalSpend),
-        new Decimal(0)
-      ).toNumber()
+        (sum, [_, data]) => sum + data.totalSpend,
+        0
+      )
       const avgBasket =
         totalRevenue /
         nouveaux.reduce((sum, [_, data]) => sum + data.receipts.length, 0)
@@ -263,9 +262,9 @@ export async function getClientSegments(
 
     if (explorateurs.length > 0) {
       const totalRevenue = explorateurs.reduce(
-        (sum, [_, data]) => sum.plus(data.totalSpend),
-        new Decimal(0)
-      ).toNumber()
+        (sum, [_, data]) => sum + data.totalSpend,
+        0
+      )
       const avgBasket =
         totalRevenue /
         explorateurs.reduce((sum, [_, data]) => sum + data.receipts.length, 0)

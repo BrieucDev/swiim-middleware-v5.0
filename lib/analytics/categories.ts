@@ -1,4 +1,3 @@
-import { Decimal } from '@prisma/client/runtime/library'
 import { loadPrisma } from './utils'
 
 export interface CategoryAnalytics {
@@ -49,7 +48,7 @@ export async function getCategoryAnalytics(
       string,
       {
         receipts: typeof receipts
-        lineItems: Array<{ category: string; unitPrice: Decimal; quantity: number }>
+        lineItems: Array<{ category: string; unitPrice: number; quantity: number }>
         customers: Set<string>
         newCustomers: Set<string>
         loyaltyCustomers: Set<string>
@@ -69,7 +68,10 @@ export async function getCategoryAnalytics(
         }
 
         existing.receipts.push(r)
-        existing.lineItems.push(li)
+        existing.lineItems.push({
+          ...li,
+          unitPrice: Number(li.unitPrice),
+        })
         if (r.customerId) {
           existing.customers.add(r.customerId)
           if (r.customer?.loyaltyAccount) {
@@ -97,9 +99,9 @@ export async function getCategoryAnalytics(
 
     categoryData.forEach((data, category) => {
       const revenue = data.lineItems.reduce(
-        (sum, li) => sum.plus(li.unitPrice.mul(li.quantity)),
-        new Decimal(0)
-      ).toNumber()
+        (sum, li) => sum + li.unitPrice * li.quantity,
+        0
+      )
       const tickets = new Set(data.receipts.map((r) => r.id)).size
       const avgBasket = tickets > 0 ? revenue / tickets : 0
 

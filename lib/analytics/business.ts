@@ -1,4 +1,3 @@
-import { Decimal } from '@prisma/client/runtime/library'
 import { loadPrisma } from './utils'
 
 export interface BusinessOverview {
@@ -70,9 +69,9 @@ export async function getBusinessOverview(
 
     const totalReceipts = receipts.length
     const totalRevenue = receipts.reduce(
-      (sum, r) => sum.plus(r.totalAmount),
-      new Decimal(0)
-    ).toNumber()
+      (sum, r) => sum + Number(r.totalAmount),
+      0
+    )
     const averageBasket = totalReceipts > 0 ? totalRevenue / totalReceipts : 0
 
     const uniqueCustomers = new Set(
@@ -103,9 +102,9 @@ export async function getBusinessOverview(
     // Previous period stats
     const prevTotalReceipts = previousReceipts.length
     const prevTotalRevenue = previousReceipts.reduce(
-      (sum, r) => sum.plus(r.totalAmount),
-      new Decimal(0)
-    ).toNumber()
+      (sum, r) => sum + Number(r.totalAmount),
+      0
+    )
     const prevAverageBasket =
       prevTotalReceipts > 0 ? prevTotalRevenue / prevTotalReceipts : 0
     const prevUniqueCustomers = new Set(
@@ -246,7 +245,7 @@ export async function getTimeSeriesData(
 
     const byDay = new Map<
       string,
-      { count: number; revenue: Decimal; identified: number }
+      { count: number; revenue: number; identified: number }
     >()
 
     receipts.forEach((r) => {
@@ -255,12 +254,12 @@ export async function getTimeSeriesData(
 
       const current = byDay.get(day) || {
         count: 0,
-        revenue: new Decimal(0),
+        revenue: 0,
         identified: 0,
       }
       byDay.set(day, {
         count: current.count + 1,
-        revenue: current.revenue.plus(r.totalAmount),
+        revenue: current.revenue + Number(r.totalAmount),
         identified: current.identified + (r.customerId ? 1 : 0),
       })
     })
@@ -269,7 +268,7 @@ export async function getTimeSeriesData(
       .map(([date, data]) => ({
         date,
         tickets: data.count,
-        revenue: data.revenue.toNumber(),
+        revenue: data.revenue,
         identificationRate:
           data.count > 0 ? (data.identified / data.count) * 100 : 0,
       }))

@@ -19,35 +19,35 @@ export const dynamic = 'force-dynamic'
 
 async function getReceipts(searchParams: { status?: string; store?: string; query?: string }) {
   try {
-    const where: any = {}
+  const where: any = {}
 
-    if (searchParams.status) {
-      where.status = searchParams.status
-    }
+  if (searchParams.status) {
+    where.status = searchParams.status
+  }
 
-    if (searchParams.store && searchParams.store !== 'all') {
-      where.storeId = searchParams.store
-    }
+  if (searchParams.store && searchParams.store !== 'all') {
+    where.storeId = searchParams.store
+  }
 
-    if (searchParams.query) {
-      where.OR = [
-        { id: { contains: searchParams.query, mode: 'insensitive' } },
-        { customer: { email: { contains: searchParams.query, mode: 'insensitive' } } },
-      ]
-    }
+  if (searchParams.query) {
+    where.OR = [
+      { id: { contains: searchParams.query, mode: 'insensitive' } },
+      { customer: { email: { contains: searchParams.query, mode: 'insensitive' } } },
+    ]
+  }
 
-    return await prisma.receipt.findMany({
-      where,
-      include: {
-        store: true,
-        pos: true,
-        customer: true,
-      },
-      orderBy: {
-        createdAt: 'desc',
-      },
-      take: 100,
-    })
+  return await prisma.receipt.findMany({
+    where,
+    include: {
+      store: true,
+      pos: true,
+      customer: true,
+    },
+    orderBy: {
+      createdAt: 'desc',
+    },
+    take: 100,
+  })
   } catch (error) {
     console.error('Error fetching receipts:', error)
     return []

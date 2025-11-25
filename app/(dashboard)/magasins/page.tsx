@@ -16,7 +16,7 @@ export const dynamic = 'force-dynamic'
 
 async function getStoresWithStats() {
   try {
-    const stores = await prisma.store.findMany({
+  const stores = await prisma.store.findMany({
     include: {
       receipts: {
         where: {

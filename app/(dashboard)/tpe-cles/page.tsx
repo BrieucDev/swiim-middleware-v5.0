@@ -18,14 +18,14 @@ export const dynamic = 'force-dynamic'
 
 async function getTerminals() {
   try {
-    return await prisma.posTerminal.findMany({
-      include: {
-        store: true,
-      },
-      orderBy: {
-        name: 'asc',
-      },
-    })
+  return await prisma.posTerminal.findMany({
+    include: {
+      store: true,
+    },
+    orderBy: {
+      name: 'asc',
+    },
+  })
   } catch (error) {
     console.error('Error fetching terminals:', error)
     return []
@@ -34,10 +34,10 @@ async function getTerminals() {
 
 async function getStores() {
   try {
-    return await prisma.store.findMany({
-      orderBy: { name: 'asc' },
-      select: { id: true, name: true },
-    })
+  return await prisma.store.findMany({
+    orderBy: { name: 'asc' },
+    select: { id: true, name: true },
+  })
   } catch (error) {
     console.error('Error fetching stores:', error)
     return []

@@ -20,15 +20,15 @@ export const dynamic = 'force-dynamic'
 
 async function getReceipt(id: string) {
   try {
-    return await prisma.receipt.findUnique({
-      where: { id },
-      include: {
-        store: true,
-        pos: true,
-        customer: true,
-        lineItems: true,
-      },
-    })
+  return await prisma.receipt.findUnique({
+    where: { id },
+    include: {
+      store: true,
+      pos: true,
+      customer: true,
+      lineItems: true,
+    },
+  })
   } catch (error) {
     console.error('Error fetching receipt:', error)
     return null
@@ -84,32 +84,32 @@ export default async function TicketDetailPage({
           </CardHeader>
           <CardContent className="px-6 pb-6 space-y-6">
             <div className="grid gap-4 md:grid-cols-2">
-              <div>
+            <div>
                 <div className="text-xs text-gray-500 uppercase tracking-[0.14em] mb-1">Magasin</div>
                 <div className="font-semibold text-gray-900">{receipt.store.name}</div>
-              </div>
-              <div>
+            </div>
+            <div>
                 <div className="text-xs text-gray-500 uppercase tracking-[0.14em] mb-1">TPE</div>
                 <div className="font-semibold text-gray-900">{receipt.pos.name}</div>
-              </div>
-              <div>
+            </div>
+            <div>
                 <div className="text-xs text-gray-500 uppercase tracking-[0.14em] mb-1">Date</div>
                 <div className="font-semibold text-gray-900">{formatDateTime(receipt.createdAt)}</div>
-              </div>
-              <div>
+            </div>
+            <div>
                 <div className="text-xs text-gray-500 uppercase tracking-[0.14em] mb-1">Statut</div>
                 <StatusBadge status={receipt.status} />
-              </div>
             </div>
-            {receipt.customer && (
+          </div>
+          {receipt.customer && (
               <div className="pt-4 border-t border-gray-100">
                 <div className="text-xs text-gray-500 uppercase tracking-[0.14em] mb-2">Client</div>
                 <div className="font-semibold text-gray-900">{receipt.customer.firstName} {receipt.customer.lastName}</div>
                 <div className="text-sm text-gray-500 mt-1">{maskEmail(receipt.customer.email)}</div>
-              </div>
-            )}
-          </CardContent>
-        </Card>
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
         {/* Side Cards */}
         <div className="space-y-6">

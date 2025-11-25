@@ -1,4 +1,4 @@
-import { prisma } from '@/lib/prisma'
+import { loadPrisma } from '@/lib/analytics/utils'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import {
   Table,
@@ -18,6 +18,10 @@ export const dynamic = 'force-dynamic'
 
 async function getCustomer(id: string) {
   try {
+    const prisma = await loadPrisma()
+    if (!prisma) {
+      return null
+    }
     const customer = await prisma.customer.findUnique({
     where: { id },
     include: {
@@ -66,7 +70,7 @@ async function getCustomer(id: string) {
       ? Array.from(storeCounts.entries()).sort((a, b) => b[1] - a[1])[0][0]
       : null
   let mainStore = null
-  if (mainStoreId) {
+  if (mainStoreId && prisma) {
     try {
       mainStore = await prisma.store.findUnique({ where: { id: mainStoreId } })
     } catch (error) {
@@ -145,12 +149,12 @@ export default async function ClientDetailPage({
               </div>
             </div>
             <div className="flex-1 grid gap-6 md:grid-cols-2">
-              <div>
+            <div>
                 <div className="text-xs text-gray-500 uppercase tracking-[0.14em] mb-1">Nom</div>
                 <div className="font-semibold text-gray-900 text-lg">
                   {customer.firstName} {customer.lastName}
                 </div>
-              </div>
+            </div>
               <div>
                 <div className="text-xs text-gray-500 uppercase tracking-[0.14em] mb-1">Email</div>
                 <div className="font-semibold text-gray-900">{maskEmail(customer.email)}</div>
@@ -159,9 +163,9 @@ export default async function ClientDetailPage({
                 <div>
                   <div className="text-xs text-gray-500 uppercase tracking-[0.14em] mb-1">Magasin principal</div>
                   <div className="font-semibold text-gray-900">{customer.stats.mainStore}</div>
-                </div>
-              )}
-              <div>
+              </div>
+            )}
+            <div>
                 <div className="text-xs text-gray-500 uppercase tracking-[0.14em] mb-1">Membre depuis</div>
                 <div className="font-semibold text-gray-900">{formatDate(customer.createdAt)}</div>
               </div>
@@ -180,18 +184,18 @@ export default async function ClientDetailPage({
             <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
               <div>
                 <div className="text-xs text-gray-500 uppercase tracking-[0.14em] mb-2">Niveau</div>
-                <Badge
-                  variant={
-                    customer.loyaltyAccount.tier?.name === 'Or'
-                      ? 'warning'
-                      : customer.loyaltyAccount.tier?.name === 'Argent'
-                      ? 'default'
-                      : 'secondary'
-                  }
+                  <Badge
+                    variant={
+                      customer.loyaltyAccount.tier?.name === 'Or'
+                        ? 'warning'
+                        : customer.loyaltyAccount.tier?.name === 'Argent'
+                        ? 'default'
+                        : 'secondary'
+                    }
                   className="rounded-full"
-                >
-                  {customer.loyaltyAccount.tier?.name || 'Non classé'}
-                </Badge>
+                  >
+                    {customer.loyaltyAccount.tier?.name || 'Non classé'}
+                  </Badge>
               </div>
               <div>
                 <div className="text-xs text-gray-500 uppercase tracking-[0.14em] mb-1">Points</div>

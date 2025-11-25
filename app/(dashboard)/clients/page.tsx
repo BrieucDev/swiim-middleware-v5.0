@@ -1,4 +1,4 @@
-import { prisma } from '@/lib/prisma'
+import { loadPrisma } from '@/lib/analytics/utils'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import {
   Table,
@@ -19,17 +19,21 @@ export const dynamic = 'force-dynamic'
 
 async function getCustomers(searchParams: { query?: string; tier?: string; activity?: string }) {
   try {
+    const prisma = await loadPrisma()
+    if (!prisma) {
+      return []
+    }
     const where: any = {}
 
-    if (searchParams.query) {
-      where.OR = [
-        { firstName: { contains: searchParams.query, mode: 'insensitive' } },
-        { lastName: { contains: searchParams.query, mode: 'insensitive' } },
-        { email: { contains: searchParams.query, mode: 'insensitive' } },
-      ]
-    }
+  if (searchParams.query) {
+    where.OR = [
+      { firstName: { contains: searchParams.query, mode: 'insensitive' } },
+      { lastName: { contains: searchParams.query, mode: 'insensitive' } },
+      { email: { contains: searchParams.query, mode: 'insensitive' } },
+    ]
+  }
 
-    const customers = await prisma.customer.findMany({
+  const customers = await prisma.customer.findMany({
     where,
     include: {
       receipts: {

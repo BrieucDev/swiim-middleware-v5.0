@@ -1,4 +1,6 @@
+import { auth } from '@/auth'
 import { formatCurrency } from '@/lib/format'
+import { getReceiptStats, getReceiptsByDay, getStorePerformance } from '@/lib/analytics/receipts'
 import { KpiCard } from '@/components/dashboard/kpi-card'
 import { ChartCard } from '@/components/dashboard/chart-card'
 import { SectionHeader } from '@/components/dashboard/section-header'
@@ -9,41 +11,35 @@ import { StoresChart } from '@/components/dashboard/stores-chart'
 export const dynamic = 'force-dynamic'
 
 export default async function AccueilPage() {
-  // Temporarily using mock data to fix build error
-  const stats = {
-    totalReceipts: 12543,
-    totalRevenue: 452310.50,
-    claimedRate: 68.5,
-    activeCustomers: 8432,
-    averageBasket: 36.06,
-    averageFrequency: 2.4,
+  const session = await auth()
+  const userId = session?.user?.id
+
+  const [stats, receiptsByDay, storePerformance] = await Promise.all([
+    getReceiptStats(userId),
+    getReceiptsByDay(userId),
+    getStorePerformance(userId),
+  ])
+
+  const resolvedStats = stats ?? {
+    totalReceipts: 0,
+    totalRevenue: 0,
+    claimedRate: 0,
+    activeCustomers: 0,
+    averageBasket: 0,
+    averageFrequency: 0,
   }
 
-  const receiptsByDay = [
-    { date: '2023-11-15', count: 345, revenue: 12450 },
-    { date: '2023-11-16', count: 389, revenue: 14230 },
-    { date: '2023-11-17', count: 412, revenue: 15670 },
-    { date: '2023-11-18', count: 298, revenue: 10890 },
-    { date: '2023-11-19', count: 315, revenue: 11450 },
-    { date: '2023-11-20', count: 356, revenue: 13210 },
-    { date: '2023-11-21', count: 402, revenue: 14890 },
-  ]
+  const chartSource = receiptsByDay ?? []
+  const storePerf = storePerformance ?? []
 
-  const storePerformance = [
-    { id: '1', name: 'Paris Bastille', count: 4250, revenue: 154230, claimedRate: 72.5 },
-    { id: '2', name: 'Lyon Part-Dieu', count: 3890, revenue: 138450, claimedRate: 65.8 },
-    { id: '3', name: 'Bordeaux Centre', count: 2450, revenue: 89450, claimedRate: 69.2 },
-    { id: '4', name: 'Nantes Commerce', count: 1953, revenue: 70180, claimedRate: 66.5 },
-  ]
-
-  const chartData = receiptsByDay.map(({ date, count, revenue }) => ({
+  const chartData = chartSource.map(({ date, count, revenue }) => ({
     date: new Date(date).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' }),
     count,
     revenue,
   }))
 
-  const topStores = storePerformance.slice(0, 3)
-  const bottomStores = storePerformance.slice(-3).reverse()
+  const topStores = storePerf.slice(0, 3)
+  const bottomStores = storePerf.slice(-3).reverse()
 
   return (
     <div className="space-y-10">
@@ -58,32 +54,32 @@ export default async function AccueilPage() {
       <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
         <KpiCard
           title="Tickets émis"
-          value={stats.totalReceipts.toLocaleString('fr-FR')}
+          value={resolvedStats.totalReceipts.toLocaleString('fr-FR')}
           description="Sur les 30 derniers jours"
         />
         <KpiCard
           title="Chiffre d'affaires"
-          value={formatCurrency(stats.totalRevenue)}
+          value={formatCurrency(resolvedStats.totalRevenue)}
           description="Sur les 30 derniers jours"
         />
         <KpiCard
           title="Taux de réclamation"
-          value={`${stats.claimedRate.toFixed(1)}%`}
+          value={`${resolvedStats.claimedRate.toFixed(1)}%`}
           description="Tickets réclamés numériquement"
         />
         <KpiCard
           title="Clients actifs"
-          value={stats.activeCustomers.toLocaleString('fr-FR')}
+          value={resolvedStats.activeCustomers.toLocaleString('fr-FR')}
           description="Clients identifiés sur la période"
         />
         <KpiCard
           title="Panier moyen"
-          value={formatCurrency(stats.averageBasket)}
+          value={formatCurrency(resolvedStats.averageBasket)}
           description="Par transaction"
         />
         <KpiCard
           title="Fréquence moyenne"
-          value={stats.averageFrequency.toFixed(1)}
+          value={resolvedStats.averageFrequency.toFixed(1)}
           description="Visites par client"
         />
       </div>
@@ -110,54 +106,54 @@ export default async function AccueilPage() {
       <div className="grid gap-6 md:grid-cols-2">
         <ChartCard title="Top magasins" description="Par chiffre d&apos;affaires">
           <div className="space-y-6">
-            {topStores.map((store, idx) => (
-              <div key={store.id} className="flex items-center justify-between">
-                <div className="flex items-center gap-3">
+              {topStores.map((store, idx) => (
+                <div key={store.id} className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
                   <div className="flex h-8 w-8 items-center justify-center rounded-full bg-gray-900 text-white font-semibold text-sm">
-                    {idx + 1}
-                  </div>
-                  <div>
+                      {idx + 1}
+                    </div>
+                    <div>
                     <div className="font-semibold text-gray-900">{store.name}</div>
                     <div className="text-xs text-gray-400">
-                      {store.count} tickets
+                        {store.count} tickets
+                      </div>
+                    </div>
+                  </div>
+                  <div className="text-right">
+                  <div className="font-semibold text-gray-900">{formatCurrency(store.revenue)}</div>
+                  <div className="text-xs text-gray-400">
+                      {store.claimedRate.toFixed(1)}% réclamés
                     </div>
                   </div>
                 </div>
-                <div className="text-right">
-                  <div className="font-semibold text-gray-900">{formatCurrency(store.revenue)}</div>
-                  <div className="text-xs text-gray-400">
-                    {store.claimedRate.toFixed(1)}% réclamés
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
         </ChartCard>
 
         <ChartCard title="À surveiller" description="Croissance potentielle">
           <div className="space-y-6">
-            {bottomStores.map((store, idx) => (
-              <div key={store.id} className="flex items-center justify-between">
-                <div className="flex items-center gap-3">
+              {bottomStores.map((store, idx) => (
+                <div key={store.id} className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
                   <div className="flex h-8 w-8 items-center justify-center rounded-full bg-gray-100 text-gray-600 font-semibold text-sm">
-                    {idx + 1}
-                  </div>
-                  <div>
+                      {idx + 1}
+                    </div>
+                    <div>
                     <div className="font-semibold text-gray-900">{store.name}</div>
                     <div className="text-xs text-gray-400">
-                      {store.count} tickets
+                        {store.count} tickets
+                      </div>
+                    </div>
+                  </div>
+                  <div className="text-right">
+                  <div className="font-semibold text-gray-900">{formatCurrency(store.revenue)}</div>
+                  <div className="text-xs text-gray-400">
+                      {store.claimedRate.toFixed(1)}% réclamés
                     </div>
                   </div>
                 </div>
-                <div className="text-right">
-                  <div className="font-semibold text-gray-900">{formatCurrency(store.revenue)}</div>
-                  <div className="text-xs text-gray-400">
-                    {store.claimedRate.toFixed(1)}% réclamés
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
         </ChartCard>
       </div>
     </div>

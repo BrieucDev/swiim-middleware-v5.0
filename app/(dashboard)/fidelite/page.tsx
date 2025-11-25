@@ -26,7 +26,7 @@ export const dynamic = 'force-dynamic'
 
 async function getTopLoyalCustomers() {
   try {
-    const accounts = await prisma.loyaltyAccount.findMany({
+  const accounts = await prisma.loyaltyAccount.findMany({
     include: {
       customer: {
         include: {
@@ -89,7 +89,7 @@ async function getTopLoyalCustomers() {
 
 async function getCampaigns() {
   try {
-    return await prisma.loyaltyCampaign.findMany({
+  return await prisma.loyaltyCampaign.findMany({
     include: {
       program: true,
     },

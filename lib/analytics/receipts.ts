@@ -1,7 +1,10 @@
 import { prisma } from '@/lib/prisma'
 import { Decimal } from '@prisma/client/runtime/library'
 
-export async function getReceiptStats(userId: string, days: number = 30) {
+const buildStoreFilter = (userId?: string) =>
+  userId ? { store: { userId } } : {}
+
+export async function getReceiptStats(userId?: string, days: number = 30) {
   try {
     const startDate = new Date()
     startDate.setDate(startDate.getDate() - days)
@@ -11,9 +14,7 @@ export async function getReceiptStats(userId: string, days: number = 30) {
         createdAt: {
           gte: startDate,
         },
-        store: {
-          userId: userId,
-        },
+        ...buildStoreFilter(userId),
       },
       include: {
         customer: true,
@@ -63,7 +64,7 @@ export async function getReceiptStats(userId: string, days: number = 30) {
   }
 }
 
-export async function getReceiptsByDay(userId: string, days: number = 30) {
+export async function getReceiptsByDay(userId?: string, days: number = 30) {
   try {
     const startDate = new Date()
     startDate.setDate(startDate.getDate() - days)
@@ -73,9 +74,7 @@ export async function getReceiptsByDay(userId: string, days: number = 30) {
         createdAt: {
           gte: startDate,
         },
-        store: {
-          userId: userId,
-        },
+        ...buildStoreFilter(userId),
       },
       select: {
         createdAt: true,
@@ -110,7 +109,7 @@ export async function getReceiptsByDay(userId: string, days: number = 30) {
   }
 }
 
-export async function getStorePerformance(userId: string, days: number = 30) {
+export async function getStorePerformance(userId?: string, days: number = 30) {
   try {
     const startDate = new Date()
     startDate.setDate(startDate.getDate() - days)
@@ -120,9 +119,7 @@ export async function getStorePerformance(userId: string, days: number = 30) {
         createdAt: {
           gte: startDate,
         },
-        store: {
-          userId: userId,
-        },
+        ...buildStoreFilter(userId),
       },
       include: {
         store: true,

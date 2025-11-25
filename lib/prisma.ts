@@ -5,8 +5,8 @@ function normalizeDatabaseUrl(rawUrl?: string) {
     throw new Error('DATABASE_URL environment variable is not configured.')
   }
   
-  // Trim whitespace
-  rawUrl = rawUrl.trim()
+  // Trim whitespace and remove any surrounding quotes
+  rawUrl = rawUrl.trim().replace(/^["']|["']$/g, '')
   
   if (!rawUrl.startsWith('postgresql://') && !rawUrl.startsWith('postgres://')) {
     throw new Error('DATABASE_URL must start with postgresql:// or postgres://')
@@ -87,6 +87,8 @@ function normalizeDatabaseUrl(rawUrl?: string) {
     normalizedUrl += '@'
   }
   
+  // hostAndRest should already be properly formatted (host:port/database?params)
+  // Just append it as-is
   normalizedUrl += hostAndRest
   
   // Add sslmode if not present
@@ -95,12 +97,9 @@ function normalizeDatabaseUrl(rawUrl?: string) {
     normalizedUrl = `${normalizedUrl}${separator}sslmode=require`
   }
   
-  // Validate the final URL by trying to parse it
-  try {
-    new URL(normalizedUrl)
-  } catch (urlError) {
-    throw new Error(`Failed to create valid database URL after normalization: ${urlError instanceof Error ? urlError.message : 'Unknown error'}`)
-  }
+  // Don't validate with URL constructor - PostgreSQL URLs may have formats
+  // that the standard URL constructor doesn't accept
+  // Prisma will validate it when it tries to connect
   
   return normalizedUrl
 }
@@ -156,21 +155,48 @@ if (!rawDatabaseUrl) {
       })
     }
   } catch (normalizeError: any) {
-    console.error('[Prisma] Failed to normalize DATABASE_URL:', normalizeError?.message)
-    console.error('[Prisma] Raw URL (masked):', rawDatabaseUrl ? `${rawDatabaseUrl.substring(0, 20)}...` : 'undefined')
+    const errorMessage = normalizeError?.message || 'Unknown error'
+    console.error('[Prisma] Failed to normalize DATABASE_URL:', errorMessage)
     
-    // Create a proxy that throws a helpful error
-    prisma = new Proxy(
-      {},
-      {
-        get() {
-          throw new Error(
-            `DATABASE_URL normalization failed: ${normalizeError?.message || 'Unknown error'}. ` +
-            'Please check that your DATABASE_URL is properly formatted and that special characters in passwords are URL-encoded.'
-          )
-        },
+    // Log a masked version of the URL for debugging (first 30 chars)
+    if (rawDatabaseUrl) {
+      const masked = rawDatabaseUrl.length > 30 
+        ? `${rawDatabaseUrl.substring(0, 30)}...` 
+        : rawDatabaseUrl
+      console.error('[Prisma] Raw URL (masked):', masked)
+    }
+    
+    // Try to create Prisma Client with raw URL anyway - maybe it will work
+    // Prisma's own validation might be more lenient
+    try {
+      console.warn('[Prisma] Attempting to use raw DATABASE_URL despite normalization failure')
+      prisma = globalForPrisma.prisma ?? new PrismaClient({
+        log: process.env.NODE_ENV === 'development' ? ['query', 'error', 'warn'] : ['error'],
+        datasourceUrl: rawDatabaseUrl,
+      })
+      
+      if (process.env.NODE_ENV !== 'production') {
+        globalForPrisma.prisma = prisma
+      } else if (!globalForPrisma.prisma) {
+        globalForPrisma.prisma = prisma
       }
-    ) as PrismaClient
+    } catch (prismaError: any) {
+      // If Prisma also fails, create a proxy with helpful error message
+      console.error('[Prisma] Failed to create Prisma Client with raw URL:', prismaError?.message)
+      prisma = new Proxy(
+        {},
+        {
+          get() {
+            throw new Error(
+              `DATABASE_URL normalization failed: ${errorMessage}. ` +
+              `Prisma Client creation also failed: ${prismaError?.message || 'Unknown error'}. ` +
+              'Please check that your DATABASE_URL is properly formatted. ' +
+              'Special characters in passwords should be URL-encoded (e.g., @ becomes %40, : becomes %3A).'
+            )
+          },
+        }
+      ) as PrismaClient
+    }
   }
 }
 

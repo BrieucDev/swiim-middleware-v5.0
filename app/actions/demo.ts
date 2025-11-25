@@ -9,8 +9,8 @@ function normalizeDatabaseUrl(rawUrl?: string) {
         throw new Error('DATABASE_URL environment variable is not configured.');
     }
     
-    // Trim whitespace
-    rawUrl = rawUrl.trim();
+    // Trim whitespace and remove any surrounding quotes
+    rawUrl = rawUrl.trim().replace(/^["']|["']$/g, '');
     
     if (!rawUrl.startsWith('postgresql://') && !rawUrl.startsWith('postgres://')) {
         throw new Error('DATABASE_URL must start with postgresql:// or postgres://');
@@ -93,12 +93,9 @@ function normalizeDatabaseUrl(rawUrl?: string) {
         normalizedUrl = `${normalizedUrl}${separator}sslmode=require`;
     }
     
-    // Validate the final URL
-    try {
-        new URL(normalizedUrl);
-    } catch (urlError) {
-        throw new Error(`Failed to create valid database URL after normalization: ${urlError instanceof Error ? urlError.message : 'Unknown error'}`);
-    }
+    // Don't validate with URL constructor - PostgreSQL URLs may have formats
+    // that the standard URL constructor doesn't accept
+    // Prisma will validate it when it tries to connect
     
     return normalizedUrl;
 }

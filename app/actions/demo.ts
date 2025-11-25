@@ -8,22 +8,120 @@ function normalizeDatabaseUrl(rawUrl?: string) {
     if (!rawUrl) {
         throw new Error('DATABASE_URL environment variable is not configured.');
     }
+    
+    // Trim whitespace
+    rawUrl = rawUrl.trim();
+    
     if (!rawUrl.startsWith('postgresql://') && !rawUrl.startsWith('postgres://')) {
         throw new Error('DATABASE_URL must start with postgresql:// or postgres://');
     }
-    if (!rawUrl.includes('sslmode=')) {
-        const separator = rawUrl.includes('?') ? '&' : '?';
-        rawUrl = `${rawUrl}${separator}sslmode=require`;
+
+    // Extract protocol
+    const protocolMatch = rawUrl.match(/^(postgres(ql)?:\/\/)/);
+    if (!protocolMatch) {
+        throw new Error('Invalid database URL format');
     }
-    return rawUrl;
+    
+    const protocol = protocolMatch[0];
+    const restOfUrl = rawUrl.slice(protocol.length);
+    
+    // Find the @ that separates credentials from host (use last @ to handle passwords with @)
+    const hostStartIndex = restOfUrl.lastIndexOf('@');
+    
+    let username: string | undefined;
+    let password: string | undefined;
+    let hostAndRest: string;
+    
+    if (hostStartIndex === -1) {
+        // No credentials, just host/database
+        hostAndRest = restOfUrl;
+    } else {
+        // Split credentials from host
+        const credentials = restOfUrl.slice(0, hostStartIndex);
+        hostAndRest = restOfUrl.slice(hostStartIndex + 1);
+        
+        // Split username and password (password might contain :, so only split at first :)
+        const colonIndex = credentials.indexOf(':');
+        
+        if (colonIndex === -1) {
+            // No password, just username
+            username = credentials;
+        } else {
+            username = credentials.slice(0, colonIndex);
+            password = credentials.slice(colonIndex + 1);
+        }
+    }
+    
+    // Decode then re-encode to handle already-encoded passwords
+    let encodedUsername = username;
+    let encodedPassword = password;
+    
+    if (username) {
+        try {
+            const decoded = decodeURIComponent(username);
+            encodedUsername = encodeURIComponent(decoded);
+        } catch {
+            encodedUsername = encodeURIComponent(username);
+        }
+    }
+    
+    if (password) {
+        try {
+            const decoded = decodeURIComponent(password);
+            encodedPassword = encodeURIComponent(decoded);
+        } catch {
+            encodedPassword = encodeURIComponent(password);
+        }
+    }
+    
+    // Reconstruct the URL
+    let normalizedUrl = protocol;
+    
+    if (encodedUsername) {
+        normalizedUrl += encodedUsername;
+        if (encodedPassword) {
+            normalizedUrl += `:${encodedPassword}`;
+        }
+        normalizedUrl += '@';
+    }
+    
+    normalizedUrl += hostAndRest;
+    
+    // Add sslmode if not present
+    if (!normalizedUrl.includes('sslmode=')) {
+        const separator = normalizedUrl.includes('?') ? '&' : '?';
+        normalizedUrl = `${normalizedUrl}${separator}sslmode=require`;
+    }
+    
+    // Validate the final URL
+    try {
+        new URL(normalizedUrl);
+    } catch (urlError) {
+        throw new Error(`Failed to create valid database URL after normalization: ${urlError instanceof Error ? urlError.message : 'Unknown error'}`);
+    }
+    
+    return normalizedUrl;
 }
 
-const DATABASE_URL = normalizeDatabaseUrl(process.env.DATABASE_URL);
-process.env.DATABASE_URL = DATABASE_URL;
+// Normalize DATABASE_URL at module load time, but handle errors gracefully
+let DATABASE_URL: string | undefined;
+try {
+    if (process.env.DATABASE_URL) {
+        DATABASE_URL = normalizeDatabaseUrl(process.env.DATABASE_URL);
+        process.env.DATABASE_URL = DATABASE_URL;
+    }
+} catch (error) {
+    console.error('[Demo Actions] Failed to normalize DATABASE_URL:', error);
+    // DATABASE_URL will remain undefined, and getFreshPrismaClient will handle it
+}
 
 // Create a fresh Prisma instance for this action to avoid prepared statement conflicts
 // This is necessary in serverless environments with connection pooling
 function getFreshPrismaClient() {
+    if (!DATABASE_URL) {
+        throw new Error('DATABASE_URL is not configured or failed to normalize. Please check your environment variables.');
+    }
+    
     return new PrismaClient({
         log: process.env.NODE_ENV === "development" ? ["error"] : ["error"],
         datasources: {

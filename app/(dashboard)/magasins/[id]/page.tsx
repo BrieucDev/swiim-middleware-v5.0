@@ -52,9 +52,18 @@ async function getStore(id: string) {
   const averageBasket = count > 0 ? revenue / count : 0
 
   // Top category
-    let allReceipts: Awaited<ReturnType<typeof prisma.receipt.findMany<{
-      include: { lineItems: true }
-    }>>> = []
+    let allReceipts: Array<{
+      id: string
+      storeId: string
+      createdAt: Date
+      lineItems: Array<{
+        id: string
+        category: string
+        productName: string
+        quantity: number
+        unitPrice: any
+      }>
+    }> = []
     try {
       allReceipts = await retryWithFreshClient(async (prisma: PrismaClient) => {
         return await prisma.receipt.findMany({
